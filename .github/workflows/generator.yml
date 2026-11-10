@@ -39,31 +39,22 @@ jobs:
           pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run Medical AI Agent (Generate 10-15 Min Video)
+      - name: Run Medical AI Agent (Generate English & Arabic HD Videos)
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
         run: |
           python main.py
+          ls -lh english_video.mp4 arabic_video.mp4
 
-      - name: Compress Video on Cloud (From 500MB to ~75MB HD for Fast Internet)
-        run: |
-          echo "Compressing video to lightweight HD..."
-          ffmpeg -y -i final_video.mp4 \
-            -c:v libx264 -preset veryfast -crf 28 -maxrate 900k -bufsize 1800k \
-            -c:a aac -b:a 96k -movflags +faststart \
-            compressed_video.mp4
-          mv compressed_video.mp4 final_video.mp4
-          ls -lh final_video.mp4
-
-      - name: Publish Ready Video & YouTube Details for Mobile Download
+      - name: Publish English & Arabic Videos for Mobile Download
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           TAG_NAME="video-$(date +'%Y-%m-%d-%H%M%S')"
           TITLE_DATE="$(date +'%Y-%m-%d %H:%M') UTC"
-          gh release create "$TAG_NAME" final_video.mp4 \
-            --title "🎬 Medical Episode ($TITLE_DATE)" \
+          gh release create "$TAG_NAME" english_video.mp4 arabic_video.mp4 \
+            --title "🎬 Medical Episode [EN + AR] ($TITLE_DATE)" \
             --notes-file youtube_details.txt
 
       - name: Save Agent Memory Safely (Prevent Duplicate News)
