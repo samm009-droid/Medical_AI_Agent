@@ -46,6 +46,16 @@ jobs:
         run: |
           python main.py
 
+      - name: Compress Video on Cloud (From 500MB to ~75MB HD for Fast Internet)
+        run: |
+          echo "Compressing video to lightweight HD..."
+          ffmpeg -y -i final_video.mp4 \
+            -c:v libx264 -preset veryfast -crf 28 -maxrate 900k -bufsize 1800k \
+            -c:a aac -b:a 96k -movflags +faststart \
+            compressed_video.mp4
+          mv compressed_video.mp4 final_video.mp4
+          ls -lh final_video.mp4
+
       - name: Publish Ready Video & YouTube Details for Mobile Download
         env:
           GH_TOKEN: ${{ github.token }}
