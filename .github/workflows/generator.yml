@@ -1,0 +1,63 @@
+name: Daily Medical Video AI Agent
+
+on:
+  workflow_dispatch: # Allows manual 1-click run from your phone anytime
+  schedule:
+    # 1. Daily Video (Monday to Sunday) at Peak US/Europe Overlap (16:00 UTC)
+    - cron: '0 16 * * *'
+    # 2. Second Sunday Video at US/Europe Evening Peak (20:00 UTC on Sundays)
+    - cron: '0 20 * * 0'
+
+permissions:
+  contents: write
+
+jobs:
+  build_medical_video:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install System Media Tools (FFmpeg & Fonts)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg fonts-dejavu-core
+
+      - name: Install AI Agent Dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run Medical AI Agent (Generate 10-15 Min Video)
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+        run: |
+          python main.py
+
+      - name: Save Agent Memory (Prevent Duplicate News on Sunday)
+        run: |
+          git config user.name "Medical-AI-Bot"
+          git config user.email "bot@github.com"
+          if [ -f used_news.txt ]; then
+            git add used_news.txt
+            git diff --staged --quiet || git commit -m "Update used medical news memory"
+            git push
+          fi
+
+      - name: Publish Ready Video & YouTube Details for Mobile Download
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG_NAME="video-$(date +'%Y-%m-%d-%H%M')"
+          TITLE_DATE="$(date +'%Y-%m-%d %H:%M') UTC"
+          gh release create "$TAG_NAME" final_video.mp4 \
+            --title "🎬 Medical Episode ($TITLE_DATE)" \
+            --notes-file youtube_details.txt
