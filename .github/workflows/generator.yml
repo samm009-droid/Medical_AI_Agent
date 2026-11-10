@@ -1,12 +1,16 @@
 name: Daily Medical Video AI Agent
 
 on:
-  workflow_dispatch: # Allows manual 1-click run from your phone anytime
+  workflow_dispatch:
   schedule:
     # 1. Daily Video (Monday to Sunday) at Peak US/Europe Overlap (16:00 UTC)
     - cron: '0 16 * * *'
     # 2. Second Sunday Video at US/Europe Evening Peak (20:00 UTC on Sundays)
     - cron: '0 20 * * 0'
+
+concurrency:
+  group: medical-video-agent
+  cancel-in-progress: false
 
 permissions:
   contents: write
@@ -42,22 +46,27 @@ jobs:
         run: |
           python main.py
 
-      - name: Save Agent Memory (Prevent Duplicate News on Sunday)
-        run: |
-          git config user.name "Medical-AI-Bot"
-          git config user.email "bot@github.com"
-          if [ -f used_news.txt ]; then
-            git add used_news.txt
-            git diff --staged --quiet || git commit -m "Update used medical news memory"
-            git push
-          fi
-
       - name: Publish Ready Video & YouTube Details for Mobile Download
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          TAG_NAME="video-$(date +'%Y-%m-%d-%H%M')"
+          TAG_NAME="video-$(date +'%Y-%m-%d-%H%M%S')"
           TITLE_DATE="$(date +'%Y-%m-%d %H:%M') UTC"
           gh release create "$TAG_NAME" final_video.mp4 \
             --title "🎬 Medical Episode ($TITLE_DATE)" \
             --notes-file youtube_details.txt
+
+      - name: Save Agent Memory Safely (Prevent Duplicate News)
+        continue-on-error: true
+        run: |
+          git config user.name "Medical-AI-Bot"
+          git config user.email "bot@github.com"
+          if [ -f used_news.txt ]; then
+            cp used_news.txt /tmp/used_news_backup.txt
+            git fetch origin main
+            git reset --hard origin/main
+            cp /tmp/used_news_backup.txt used_news.txt
+            git add used_news.txt
+            git diff --staged --quiet || git commit -m "Update used medical news memory"
+            git push origin main || true
+          fi
