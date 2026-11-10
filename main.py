@@ -1,10 +1,15 @@
+import sys
+import subprocess
+
+# Auto-upgrade voice & AI libraries to latest versions
+subprocess.run([sys.executable, "-m", "pip", "install", "-q", "--upgrade", "edge-tts", "google-generativeai"], check=False)
+
 import os
 import re
 import json
 import time
 import random
 import asyncio
-import subprocess
 import urllib.parse
 import feedparser
 import requests
@@ -22,7 +27,6 @@ PEXELS_API_KEY = os.environ.get("PEXELS_API_KEY")
 VOICE_NAME = "en-US-ChristopherNeural"  # Constant Professional American Documentary Host
 USED_NEWS_FILE = "used_news.txt"
 
-# Top Global Medical & Health Breakthrough Sources
 RSS_FEEDS = [
     "https://www.sciencedaily.com/rss/health_medicine.xml",
     "https://medicalxpress.com/rss-feed/",
@@ -41,21 +45,61 @@ FALLBACK_MEDICAL_QUERIES = [
 os.makedirs("temp", exist_ok=True)
 used_pexels_ids = set()
 
-# ==================== 2. AI MODEL SETUP ====================
+# ==================== 2. SMART AI MODEL DETECTOR ====================
 genai.configure(api_key=GEMINI_API_KEY)
+ACTIVE_GEMINI_MODEL = None
+
+def get_available_models():
+    preferred = [
+        "gemini-3.0-flash",
+        "gemini-3-flash-preview",
+        "gemini-2.5-flash",
+        "gemini-2.5-flash-lite",
+        "gemini-2.0-flash"
+    ]
+    discovered = []
+    try:
+        for m in genai.list_models():
+            methods = getattr(m, "supported_generation_methods", [])
+            if "generateContent" in methods:
+                name = m.name.replace("models/", "")
+                low = name.lower()
+                if "gemini" in low and not any(x in low for x in ["vision", "embedding", "tts", "image", "audio"]):
+                    discovered.append(name)
+    except Exception as e:
+        print(f"Model discovery note: {e}")
+
+    flash_first = [m for m in discovered if "flash" in m.lower()] + [m for m in discovered if "flash" not in m.lower()]
+    combined = []
+    for m in preferred + flash_first:
+        if m not in combined:
+            combined.append(m)
+    print(f"Detected available Gemini models: {combined[:6]}")
+    return combined
+
+AVAILABLE_MODELS = get_available_models()
 
 def ask_gemini(prompt):
-    models_to_try = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]
+    global ACTIVE_GEMINI_MODEL
+    models_to_try = [ACTIVE_GEMINI_MODEL] + [m for m in AVAILABLE_MODELS if m != ACTIVE_GEMINI_MODEL] if ACTIVE_GEMINI_MODEL else AVAILABLE_MODELS
+
     for model_name in models_to_try:
-        try:
-            model = genai.GenerativeModel(model_name)
-            response = model.generate_content(prompt)
-            if response and response.text:
-                return response.text.strip()
-        except Exception as e:
-            print(f"Model {model_name} attempt note: {e}")
-            time.sleep(3)
-    raise Exception("Failed to get response from Gemini API.")
+        for attempt in range(3):
+            try:
+                model = genai.GenerativeModel(model_name)
+                response = model.generate_content(prompt)
+                if response and response.text:
+                    ACTIVE_GEMINI_MODEL = model_name
+                    return response.text.strip()
+            except Exception as e:
+                err_str = str(e)
+                if "429" in err_str or "quota" in err_str.lower() or "rate" in err_str.lower():
+                    print(f"Rate limit pause on {model_name}, waiting 20s...")
+                    time.sleep(20)
+                else:
+                    print(f"Model {model_name} switch note: {e}")
+                    break
+    raise Exception("Failed to get response from all detected Gemini models.")
 
 def clean_json_response(text):
     text = re.sub(r"```json\s*", "", text)
@@ -97,7 +141,6 @@ def fetch_top_medical_news(count=5):
         except Exception as e:
             print(f"RSS error ({url}): {e}")
 
-    # If all recent news were somehow used, fallback to ignoring history
     if len(articles) < count:
         for url in RSS_FEEDS:
             feed = feedparser.parse(url)
@@ -118,7 +161,6 @@ def build_full_script(articles):
     segments = []
     titles_list = "\n".join([f"{i+1}. {a['title']}" for i, a in enumerate(articles)])
 
-    # A. Intro & US/EU SEO Metadata
     intro_prompt = f"""
     You are an elite American medical documentary narrator for a top US/European YouTube channel.
     Write a captivating 130-word introduction for today's medical news episode covering these 5 breakthroughs:
@@ -145,9 +187,8 @@ def build_full_script(articles):
         "narration": meta_data["intro_narration"],
         "queries": meta_data.get("visual_queries", ["medical technology", "scientist laboratory", "hospital doctor"])
     })
-    time.sleep(4)
+    time.sleep(5)
 
-    # B. 5 Stories x 4 Visual Scenes each (~380 words per story -> ~2100 words total = 12-14 mins)
     for idx, article in enumerate(articles):
         print(f"Writing synchronized visual scenes for Story {idx+1}/5: {article['title'][:50]}...")
         story_prompt = f"""
@@ -163,7 +204,7 @@ def build_full_script(articles):
 
         CRITICAL VISUAL MATCHING RULE:
         For EACH scene, provide 3 concrete, physical stock-footage search queries (2 to 4 English words each) that chronologically match the exact objects, organs, symptoms, or actions spoken in the First third, Middle third, and Final third of that scene's narration!
-        (Examples of great concrete queries: "brain mri scan", "pills pharmaceutical capsule", "senior man chest pain", "scientist pipette laboratory", "surgeon operating room", "blood sample test tube", "sleeping woman insomnia").
+        (Examples: "brain mri scan", "pills pharmaceutical capsule", "senior man chest pain", "scientist pipette laboratory", "surgeon operating room", "blood sample test tube").
 
         Return ONLY valid JSON in this exact format:
         {{
@@ -196,9 +237,8 @@ def build_full_script(articles):
                 "narration": scene["narration"],
                 "queries": scene.get("visual_queries", ["medical research", "doctor patient", "laboratory"])
             })
-        time.sleep(4)
+        time.sleep(5)
 
-    # C. Outro
     outro_prompt = """
     Write a professional 100-word conclusion for an American medical news documentary episode.
     Include a clear educational disclaimer (not personal medical advice) and invite viewers in the US, Europe, and around the world to subscribe and comment.
@@ -224,16 +264,22 @@ async def _generate_tts(text, output_file):
 
 def create_voiceover(text, output_file):
     clean_text = re.sub(r"[*#_~`]", "", text).strip()
-    asyncio.run(_generate_tts(clean_text, output_file))
+    for attempt in range(3):
+        try:
+            asyncio.run(_generate_tts(clean_text, output_file))
+            if os.path.exists(output_file) and os.path.getsize(output_file) > 1000:
+                return
+        except Exception as e:
+            print(f"TTS retry {attempt+1}: {e}")
+            time.sleep(3)
+    raise Exception("Failed to generate voiceover audio.")
 
 # ==================== 6. SMART VISUAL MATCHING & TV GRAPHICS ====================
 def create_news_overlay(headline_text, output_png):
     img = Image.new("RGBA", (1280, 720), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
 
-    # Top-right Broadcast Badge
     draw.rectangle([1010, 32, 1235, 72], fill=(185, 18, 28, 235))
-    # Lower-Third Broadcast Banner
     draw.rectangle([0, 602, 1280, 685], fill=(8, 20, 42, 235))
     draw.rectangle([0, 595, 1280, 602], fill=(0, 195, 235, 255))
     draw.rectangle([40, 565, 365, 598], fill=(0, 135, 185, 255))
@@ -251,7 +297,6 @@ def create_news_overlay(headline_text, output_png):
     img.save(output_png)
 
 def score_video_relevance(video_obj, query):
-    """Scores Pexels video URL description against the exact spoken medical keywords."""
     slug = video_obj.get("url", "").lower()
     keywords = [w.lower() for w in re.findall(r"\w+", query) if len(w) > 2]
     score = sum(3 for kw in keywords if kw in slug)
@@ -267,7 +312,6 @@ def download_matched_visual(query, dest_path):
         r = requests.get(url, headers=headers, timeout=15)
         if r.status_code == 200:
             videos = [v for v in r.json().get("videos", []) if v.get("id") not in used_pexels_ids]
-            # Sort videos by highest relevance to the medical query
             videos.sort(key=lambda v: score_video_relevance(v, query), reverse=True)
 
             for v in videos:
@@ -284,7 +328,6 @@ def download_matched_visual(query, dest_path):
     except Exception as e:
         print(f"Pexels video search note for '{query}': {e}")
 
-    # Fallback to Pexels High-Res Photo if video for ultra-specific medical term wasn't found
     photo_url = f"https://api.pexels.com/v1/search?query={urllib.parse.quote(query)}&orientation=landscape&per_page=5"
     try:
         r = requests.get(photo_url, headers=headers, timeout=15)
@@ -317,7 +360,6 @@ def render_segment_video(idx, segment):
 
     create_news_overlay(segment["headline"], overlay_path)
 
-    # Divide the scene duration evenly across its 3 chronological visual queries
     scene_queries = list(segment["queries"])
     while len(scene_queries) < 3:
         scene_queries.append(random.choice(FALLBACK_MEDICAL_QUERIES))
@@ -329,7 +371,6 @@ def render_segment_video(idx, segment):
         raw_base = f"temp/raw_{idx}_{q_idx}.mp4"
         media_type = download_matched_visual(q, raw_base)
 
-        # If specific query failed, try a clean medical fallback
         if not media_type:
             media_type = download_matched_visual(random.choice(FALLBACK_MEDICAL_QUERIES), raw_base)
 
@@ -339,7 +380,6 @@ def render_segment_video(idx, segment):
                 if vc.duration >= slot_duration:
                     vc = vc.subclip(0, slot_duration)
                 else:
-                    # Loop seamlessly to fill the exact spoken slot
                     repeats = int(slot_duration // vc.duration) + 1
                     vc = concatenate_videoclips([vc] * repeats).subclip(0, slot_duration)
                 visual_clips.append(vc)
@@ -423,7 +463,6 @@ if __name__ == "__main__":
     story_timestamps = ["00:00 Introduction - Today's Medical Briefing"]
 
     for i, seg in enumerate(segments):
-        # Record chapter timestamps at the start of each story (segments 1, 5, 9, 13, 17)
         if i in [1, 5, 9, 13, 17]:
             story_num = ((i - 1) // 4) + 1
             story_title = articles[story_num - 1]["title"][:65]
