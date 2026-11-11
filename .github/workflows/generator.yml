@@ -5,12 +5,8 @@ on:
     # Daily every day at 16:00 UTC
     - cron: '0 16 * * *'
     # Extra Sunday episode at 20:00 UTC (2 videos on Sunday)
-    - cron: '0 16,20 * * 0'
+    - cron: '0 20 * * 0'
   workflow_dispatch:
-
-concurrency:
-  group: medical-video-generator
-  cancel-in-progress: true
 
 permissions:
   contents: write
@@ -18,7 +14,6 @@ permissions:
 jobs:
   build_video:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
 
     steps:
       - name: Checkout Repository
@@ -29,50 +24,31 @@ jobs:
         with:
           python-version: '3.10'
 
+      - name: Install System Media Tools (FFmpeg & Fonts)
+        run: |
+          sudo apt-get update -y || true
+          sudo apt-get install -y --fix-missing ffmpeg fonts-dejavu-core
+
       - name: Install Python Libraries
         run: |
           pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Setup FFmpeg, FFprobe & Fonts (Direct GitHub CDN - Zero apt-get)
-        run: |
-          if ! command -v ffmpeg >/dev/null 2>&1 || ! command -v ffprobe >/dev/null 2>&1; then
-            echo "⚡ Downloading static FFmpeg & FFprobe directly from GitHub CDN..."
-            curl -L --retry 3 --connect-timeout 15 -o /tmp/ffmpeg.tar.xz "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz"
-            sudo tar -xJf /tmp/ffmpeg.tar.xz -C /usr/local/bin --strip-components=2 --wildcards "*/bin/ffmpeg" "*/bin/ffprobe"
-            sudo chmod +x /usr/local/bin/ffmpeg /usr/local/bin/ffprobe
-            rm -f /tmp/ffmpeg.tar.xz
-          fi
-          sudo mkdir -p /usr/share/fonts/truetype/dejavu
-          if [ ! -f /usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf ] || [ ! -f /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf ]; then
-            curl -L --retry 3 --connect-timeout 15 -o /tmp/dejavu.tar.bz2 "https://github.com/dejavu-fonts/dejavu-fonts/releases/download/version_2_37/dejavu-fonts-ttf-2.37.tar.bz2"
-            sudo tar -xjf /tmp/dejavu.tar.bz2 -C /usr/share/fonts/truetype/dejavu --strip-components=2 --wildcards "*/ttf/DejaVuSans-Bold.ttf" "*/ttf/DejaVuSans.ttf"
-            rm -f /tmp/dejavu.tar.bz2
-          fi
-          ls -la /usr/share/fonts/truetype/dejavu/
-          echo "✅ FFmpeg, FFprobe & DejaVu Fonts verified and ready!"
-
-      - name: Run AI Agent (Full Features + Thumbnail + Fast Render)
+      - name: Run AI Agent
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
         run: |
-          # Remove deprecated -vsync flag automatically for FFmpeg 8 compatibility
-          sed -i 's/"-vsync", "cfr",//g' main.py
           python -u main.py
 
-      - name: Publish Video & Thumbnail to GitHub Releases
+      - name: Publish Video to GitHub Releases
         if: success()
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG_NAME="episode-$(date +'%Y-%m-%d-%H-%M')"
           TITLE_DATE="$(date +'%Y-%m-%d %H:%M UTC')"
-          if [ -f thumbnail.jpg ]; then
-            gh release create "$TAG_NAME" final_video.mp4 thumbnail.jpg --title "🎬 Medical Episode ($TITLE_DATE)" --notes-file youtube_details.txt
-          else
-            gh release create "$TAG_NAME" final_video.mp4 --title "🎬 Medical Episode ($TITLE_DATE)" --notes-file youtube_details.txt
-          fi
+          gh release create "$TAG_NAME" final_video.mp4 --title "🎬 Medical Episode ($TITLE_DATE)" --notes-file youtube_details.txt
 
       - name: Save Memory (Prevent Repeating News & Video Clips)
         if: success()
@@ -84,9 +60,8 @@ jobs:
           git config --global user.email "actions@github.com"
           git fetch origin main
           git reset --hard origin/main
-          sed -i 's/"-vsync", "cfr",//g' main.py
           cp /tmp/used_news_backup.txt used_news.txt || true
           cp /tmp/used_videos_backup.txt used_videos.txt || true
-          git add main.py used_news.txt used_videos.txt
-          git diff --staged --quiet || git commit -m "Update memory & FFmpeg compatibility [skip ci]"
+          git add used_news.txt used_videos.txt
+          git diff --staged --quiet || git commit -m "Update memory: used news and video clips [skip ci]"
           git push origin main
