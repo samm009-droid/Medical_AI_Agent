@@ -39,21 +39,21 @@ jobs:
           pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run Medical AI Agent (Generate Pro-Transition HD Video)
+      - name: Run Medical AI Agent (Generate Video + Custom Thumbnail)
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
         run: |
           python main.py
-          ls -lh final_video.mp4
+          ls -lh final_video.mp4 thumbnail.jpg
 
-      - name: Publish Ready Video & YouTube Details for Mobile Download
+      - name: Publish Video, Thumbnail & YouTube Details for Mobile Download
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           TAG_NAME="video-$(date +'%Y-%m-%d-%H%M%S')"
           TITLE_DATE="$(date +'%Y-%m-%d %H:%M') UTC"
-          gh release create "$TAG_NAME" final_video.mp4 \
+          gh release create "$TAG_NAME" final_video.mp4 thumbnail.jpg \
             --title "🎬 Medical Episode ($TITLE_DATE)" \
             --notes-file youtube_details.txt
 
