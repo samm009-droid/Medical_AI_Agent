@@ -2,10 +2,8 @@ name: Generate Medical Video
 
 on:
   schedule:
-    # Daily every day at 16:00 UTC
-    - cron: '0 16 * * *'
-    # Extra Sunday episode at 20:00 UTC (2 videos on Sunday)
-    - cron: '0 20 * * 0'
+    # Starts automatically at 15:00 UTC (6:00 PM Saudi Time) so it is ready by 6:30 PM
+    - cron: '0 15 * * *'
   workflow_dispatch:
 
 permissions:
