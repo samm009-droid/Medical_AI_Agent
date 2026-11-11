@@ -1,10 +1,10 @@
 import sys
 import subprocess
 
-# Auto-install required latest packages including Arabic text shaping
+# Ensure latest voice & AI libraries
 subprocess.run([
     sys.executable, "-m", "pip", "install", "-q", "--upgrade",
-    "edge-tts", "google-generativeai", "arabic-reshaper", "python-bidi"
+    "edge-tts", "google-generativeai"
 ], check=False)
 
 import os
@@ -17,23 +17,20 @@ import urllib.parse
 import feedparser
 import requests
 import edge_tts
-import arabic_reshaper
-from bidi.algorithm import get_display
 import google.generativeai as genai
 from PIL import Image, ImageDraw, ImageFont
 
 # ==================== 1. CONFIGURATION ====================
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 PEXELS_API_KEY = os.environ.get("PEXELS_API_KEY")
-
-VOICE_EN = "en-US-ChristopherNeural"  # Constant American Documentary Host
-VOICE_AR = "ar-SA-HamedNeural"        # Constant Arabic Documentary Host
+VOICE_EN = "en-US-ChristopherNeural"  # Constant American Documentary Narrator
 USED_NEWS_FILE = "used_news.txt"
 
 RSS_FEEDS = [
-    ("ScienceDaily", "https://www.sciencedaily.com/rss/health_medicine.xml"),
+    ("ScienceDaily Health", "https://www.sciencedaily.com/rss/health_medicine.xml"),
     ("MedicalXpress", "https://medicalxpress.com/rss-feed/"),
-    ("ScienceDaily Brain", "https://www.sciencedaily.com/rss/mind_brain.xml"),
+    ("ScienceDaily Mind & Brain", "https://www.sciencedaily.com/rss/mind_brain.xml"),
+    ("ScienceDaily Living Well", "https://www.sciencedaily.com/rss/living_well.xml"),
     ("EurekAlert Medicine", "https://www.eurekalert.org/rss/medicine_health.xml"),
     ("News-Medical", "https://www.news-medical.net/tag/feed/Medical-Research.aspx")
 ]
@@ -44,11 +41,13 @@ FALLBACK_VIDEO_QUERIES = [
     "medicine pills manufacturing", "brain scan hospital",
     "surgeon operating room", "heart monitor hospital",
     "blood test tube laboratory", "pharmacist medicine",
+    "healthy food nutrition", "person sleeping bedroom",
     "doctor computer hospital", "clinical trial scientist"
 ]
 
 os.makedirs("temp", exist_ok=True)
 used_pexels_ids = set()
+http_session = requests.Session()
 
 # ==================== 2. SMART AI MODEL DETECTOR ====================
 genai.configure(api_key=GEMINI_API_KEY)
@@ -112,7 +111,7 @@ def clean_json_response(text):
         return json.loads(text[start:end+1])
     raise ValueError("Invalid JSON format from AI")
 
-# ==================== 3. FETCH FRESH MEDICAL NEWS WITH SOURCES ====================
+# ==================== 3. VIRAL MEDICAL NEWS FILTER (PICK MOST EXCITING 5 OF 30) ====================
 def load_used_titles():
     if os.path.exists(USED_NEWS_FILE):
         with open(USED_NEWS_FILE, "r", encoding="utf-8") as f:
@@ -124,23 +123,23 @@ def save_used_titles(new_titles):
         for t in new_titles:
             f.write(t.strip() + "\n")
 
-def fetch_top_medical_news(count=5):
-    print("Fetching latest medical breakthroughs with sources...")
+def fetch_viral_medical_news(count=5):
+    print("Scanning global feeds for candidate medical breakthroughs...")
     used_titles = load_used_titles()
-    articles = []
+    candidates = []
     seen_now = set()
 
     for source_name, url in RSS_FEEDS:
         try:
             feed = feedparser.parse(url)
-            for entry in feed.entries[:15]:
+            for entry in feed.entries[:12]:
                 title = entry.get("title", "").strip()
                 summary = re.sub(r"<[^>]+>", "", entry.get("summary", "")).strip()
                 link = entry.get("link", "").strip()
                 t_lower = title.lower()
-                if title and len(summary) > 50 and t_lower not in used_titles and t_lower not in seen_now:
+                if title and len(summary) > 60 and t_lower not in used_titles and t_lower not in seen_now:
                     seen_now.add(t_lower)
-                    articles.append({
+                    candidates.append({
                         "title": title,
                         "summary": summary[:900],
                         "source": source_name,
@@ -149,7 +148,7 @@ def fetch_top_medical_news(count=5):
         except Exception as e:
             print(f"RSS error ({url}): {e}")
 
-    if len(articles) < count:
+    if len(candidates) < count:
         for source_name, url in RSS_FEEDS:
             feed = feedparser.parse(url)
             for entry in feed.entries[:10]:
@@ -158,157 +157,189 @@ def fetch_top_medical_news(count=5):
                 link = entry.get("link", "").strip()
                 if title and title.lower() not in seen_now:
                     seen_now.add(title.lower())
-                    articles.append({
+                    candidates.append({
                         "title": title,
                         "summary": summary[:900],
                         "source": source_name,
                         "link": link
                     })
 
-    selected = articles[:count]
+    pool = candidates[:28]
+    if len(pool) <= count:
+        selected = pool[:count]
+        save_used_titles([a["title"] for a in selected])
+        return selected
+
+    print(f"Using AI Viral Editor to select the 5 most fascinating human-relevant breakthroughs out of {len(pool)}...")
+    numbered_list = "\n".join([f"{i}: {a['title']} — {a['summary'][:180]}" for i, a in enumerate(pool)])
+    selector_prompt = f"""
+    You are a viral YouTube Medical Documentary Producer (like Dr. Eric Berg, Institute of Human Anatomy, and Veritasium).
+    Below are {len(pool)} newly published medical & health news articles:
+    {numbered_list}
+
+    Select the 5 MOST FASCINATING, SHOCKING, AND HUMAN-RELEVANT stories that everyday viewers in the US and Europe will care deeply about (prioritize topics about: sleep, brain/memory, heart health, longevity/aging, common medications/drugs, everyday foods/drinks, cancer breakthroughs, gut health, or surprising body secrets. AVOID dry, overly technical lab-only chemistry stories).
+
+    Order them from #1 (Most Mind-Blowing Hook Story) to #5.
+    Return ONLY valid JSON in this exact format:
+    {{
+      "selected_indices": [0, 4, 7, 12, 19]
+    }}
+    """
+    try:
+        sel_data = clean_json_response(ask_gemini(selector_prompt))
+        indices = [int(x) for x in sel_data.get("selected_indices", []) if 0 <= int(x) < len(pool)]
+        selected = []
+        for idx in indices:
+            if pool[idx] not in selected:
+                selected.append(pool[idx])
+        for item in pool:
+            if len(selected) >= count:
+                break
+            if item not in selected:
+                selected.append(item)
+        selected = selected[:count]
+    except Exception as e:
+        print(f"Viral selector fallback note: {e}")
+        selected = pool[:count]
+
     save_used_titles([a["title"] for a in selected])
     return selected
 
-# ==================== 4. BILINGUAL SCRIPT & DYNAMIC HOOK GENERATOR ====================
-def build_bilingual_script(articles):
-    print("Building English & Arabic scripts with unique daily Hook & Source citations...")
+# ==================== 4. HIGH-RETENTION STORYTELLING SCRIPT BUILDER ====================
+def build_storytelling_script(articles):
+    print("Crafting High-Retention YouTube Medical Storytelling Script...")
     segments = []
-    titles_list = "\n".join([f"{i+1}. {a['title']} (Source: {a['source']})" for i, a in enumerate(articles)])
+    titles_list = "\n".join([f"Story #{i+1}: {a['title']} (Source: {a['source']})" for i, a in enumerate(articles)])
 
-    # A. Dynamic Cold-Open Hook + Intro (Unique Every Video!)
+    # A. Explosive Cold-Open Hook & Episode Intro
     intro_prompt = f"""
-    You are an elite medical documentary producer creating BOTH an English version (for US/Europe) and a professional Modern Standard Arabic version (الفصحى الإخبارية الوثائقية) of today's medical episode covering:
+    You are a charismatic, million-subscriber American YouTube medical storyteller.
+    Today's 5 real-time medical breakthroughs are:
     {titles_list}
+    Lead Story Summary: {articles[0]['summary']}
 
-    Create a UNIQUE, dramatic "Cold Open Hook" + Introduction (around 140 words in English, and equivalent 130 words in eloquent Arabic):
-    - Start immediately with a shocking scientific question or dramatic hook about Story #1 (DO NOT start with "Welcome back" in the first sentence—hook the viewer first, then welcome them to the briefing!).
-    - Also provide viral YouTube titles, descriptions, and tags in both English and Arabic.
+    Write a high-retention 135-word "Cold-Open Hook & Intro":
+    - DO NOT sound like a boring news anchor. Never say "Welcome to today's report."
+    - Start Sentence #1 by addressing the viewer directly ("You") with a mind-blowing question, everyday habit, or shocking scenario from Story #1 that grabs their attention in the first 5 seconds!
+    - Then tease how today's new medical discoveries are flipping what we know about the human body upside down, and briefly tease the other breakthroughs coming up in this episode so viewers stay until the end.
+    - Also generate a high-CTR viral YouTube Title (curiosity-driven, under 85 chars), a compelling SEO Description, and 12 tags.
 
     Return ONLY valid JSON in this exact structure:
     {{
-      "en_title": "Viral English YouTube Title under 90 chars",
-      "en_description": "Detailed English SEO description...",
-      "en_tags": ["medical news", "health breakthrough", "medicine"],
-      "ar_title": "عنوان يوتيوب عربي جذاب ومثير للاهتمام",
-      "ar_description": "وصف تفصيلي للفيديو باللغة العربية...",
-      "ar_tags": ["أخبار الطب", "اكتشافات طبية", "الصحة"],
-      "en_narration": "140 words English spoken hook and intro only...",
-      "ar_narration": "130 كلمة تعليق صوتي عربي فصيح ومشوق للمقدمة...",
-      "visual_queries": ["doctor medical technology", "scientist laboratory microscope", "hospital health care"]
+      "youtube_title": "Curiosity-driven viral medical YouTube title...",
+      "youtube_description": "Engaging SEO description...",
+      "youtube_tags": ["medical breakthroughs", "health news", "human body"],
+      "intro_narration": "135 words spoken conversational storytelling only (no stage directions, no labels)...",
+      "visual_queries": ["human brain glowing", "doctor examining patient", "scientist laboratory", "medical technology"]
     }}
     """
     meta_data = clean_json_response(ask_gemini(intro_prompt))
     segments.append({
         "is_transition_start": True,
-        "source_badge_en": "DAILY MEDICAL BRIEFING",
-        "source_badge_ar": "النشرة الطبية اليومية",
-        "headline_en": "TODAY'S TOP 5 MEDICAL BREAKTHROUGHS",
-        "headline_ar": "أهم ٥ اكتشافات وأبحاث طبية عالمية اليوم",
-        "narration_en": meta_data["en_narration"],
-        "narration_ar": meta_data["ar_narration"],
-        "queries": meta_data.get("visual_queries", ["medical technology", "scientist laboratory", "hospital doctor"])
+        "source_badge": "BREAKING HEALTH SCIENCE  |  VERIFIED RESEARCH",
+        "headline": meta_data.get("youtube_title", "5 NEW DISCOVERIES CHANGING HUMAN HEALTH").upper()[:62],
+        "narration": meta_data["intro_narration"],
+        "queries": meta_data.get("visual_queries", ["human brain", "doctor patient", "scientist laboratory", "medical technology"])
     })
-    time.sleep(5)
+    time.sleep(4)
 
-    # B. 5 Stories x 4 Synchronized Scenes (Both English & Arabic)
+    # B. 5 Stories x 4 Fast-Paced Storytelling Acts (With Analogies & Cliffhangers!)
     for idx, article in enumerate(articles):
-        print(f"Writing Bilingual Synchronized Scenes for Story {idx+1}/5...")
+        next_story_title = articles[idx + 1]["title"] if idx + 1 < len(articles) else "our final health takeaway"
+        print(f"Writing High-Retention Storytelling Acts for Breakthrough {idx+1}/5...")
+
         story_prompt = f"""
-        You are an elite medical documentary writer in English and Modern Standard Arabic (الفصحى الوثائقية).
-        Write an in-depth report on this medical breakthrough:
-        Title: {article['title']}
-        Source: {article['source']}
-        Details: {article['summary']}
+        You are an elite American YouTube medical storyteller (like Institute of Human Anatomy & Veritasium).
+        Transform this brand-new scientific study into a gripping, easy-to-follow, conversational story that keeps viewers glued to the screen:
 
-        Break this story into EXACTLY 4 chronological scenes (~95 words per scene in English, and ~85 words per scene in eloquent Arabic):
-        - Scene 1: Dramatic Transition & The Discovery (Explicitly mention the source "{article['source']}" or research team, and explain what was discovered).
-        - Scene 2: Mechanism Inside the Body (How this drug, therapy, or biological mechanism works).
-        - Scene 3: Clinical Evidence & Trial Results (What the study proved and who benefits).
-        - Scene 4: Future Outlook & Medical Takeaway (When it will help patients and key health takeaway).
+        Study Title: {article['title']}
+        Scientific Source: {article['source']}
+        Study Details: {article['summary']}
+        Next Story Coming Up After This One: {next_story_title}
 
-        VISUAL MATCHING RULE:
-        For EACH scene, provide 3 concrete English stock-video search queries (2-3 simple words each, e.g., "brain scan hospital", "pills medicine", "scientist microscope", "doctor patient", "heart monitor") matching the start, middle, and end of that scene.
+        STORYTELLING RULES (CRITICAL):
+        - NEVER use boring phrases like "Report number {idx+1}" or "In this article."
+        - Speak directly to the viewer ("you", "your body", "your brain", "imagine waking up...").
+        - Explain complex medical terms using vivid, everyday analogies (e.g., comparing immune cells to security guards, blood vessels to highways, brain signals to electrical wiring).
+        - Naturally mention the scientific source ("Researchers featured in {article['source']}" or the specific university in the summary) to build authority.
+
+        Divide this story into EXACTLY 4 engaging acts (90 to 100 words per act, total ~380 words):
+        - Act 1 (The Relatable Mystery & Shocking Discovery): Start with a relatable human symptom, daily habit, or mystery the viewer experiences, then reveal the surprising breakthrough scientists just uncovered.
+        - Act 2 (Inside Your Body - The Simple Analogy): Take the viewer on a visual journey inside the human body. Use a crystal-clear analogy to explain how this drug, cell, or biological mechanism actually works.
+        - Act 3 (The Plot Twist & Real Proof): Share what happened in the study or clinical trials—the surprising numbers, why doctors were stunned, and who this can save or help.
+        - Act 4 (What This Means For YOU + Cliffhanger Bridge): Give the viewer a practical takeaway for their own health awareness, and in the final sentence, create a suspenseful cliffhanger transition teasing the next story ("{next_story_title}")! (If this is Story #5, tease the final big takeaway instead).
+
+        FAST VISUAL PACING RULE:
+        For EACH act, provide 4 concrete, physical stock-video search queries (2 to 3 simple English words each, e.g., "person drinking coffee", "brain mri scan", "pills medicine", "doctor talking patient", "microscope cells", "woman sleeping bed", "man chest pain", "surgeon operating room") matching the 4 quarters of that act's narration!
 
         Return ONLY valid JSON in this exact format:
         {{
-          "headline_en": "SHORT ENGLISH HEADLINE UNDER 58 CHARS",
-          "headline_ar": "عنوان عربي مختصر للخبر الطبي",
-          "scenes": [
+          "curiosity_headline": "INTRIGUING 6-TO-9 WORD HEADLINE UNDER 58 CHARS",
+          "acts": [
             {{
-              "narration_en": "95 words spoken English text...",
-              "narration_ar": "85 كلمة تعليق صوتي عربي فصيح...",
-              "visual_queries": ["query 1", "query 2", "query 3"]
+              "narration": "90-100 words conversational spoken narration...",
+              "visual_queries": ["query 1", "query 2", "query 3", "query 4"]
             }},
             {{
-              "narration_en": "95 words spoken English text...",
-              "narration_ar": "85 كلمة تعليق صوتي عربي فصيح...",
-              "visual_queries": ["query 1", "query 2", "query 3"]
+              "narration": "90-100 words conversational spoken narration...",
+              "visual_queries": ["query 1", "query 2", "query 3", "query 4"]
             }},
             {{
-              "narration_en": "95 words spoken English text...",
-              "narration_ar": "85 كلمة تعليق صوتي عربي فصيح...",
-              "visual_queries": ["query 1", "query 2", "query 3"]
+              "narration": "90-100 words conversational spoken narration...",
+              "visual_queries": ["query 1", "query 2", "query 3", "query 4"]
             }},
             {{
-              "narration_en": "95 words spoken English text...",
-              "narration_ar": "85 كلمة تعليق صوتي عربي فصيح...",
-              "visual_queries": ["query 1", "query 2", "query 3"]
+              "narration": "90-100 words conversational spoken narration...",
+              "visual_queries": ["query 1", "query 2", "query 3", "query 4"]
             }}
           ]
         }}
         """
         story_data = clean_json_response(ask_gemini(story_prompt))
-        h_en = story_data.get("headline_en", article["title"][:58]).upper()
-        h_ar = story_data.get("headline_ar", "تقرير طبي جديد")
+        headline = story_data.get("curiosity_headline", article["title"][:58]).upper()
 
-        for s_idx, scene in enumerate(story_data["scenes"]):
+        for a_idx, act in enumerate(story_data["acts"]):
             segments.append({
-                "is_transition_start": (s_idx == 0),  # Triggers smooth Story Transition effect on Scene 1
-                "source_badge_en": f"REPORT #{idx+1} OF 5  |  SOURCE: {article['source'].upper()}",
-                "source_badge_ar": f"التقرير {idx+1} من 5  |  المصدر: {article['source']}",
-                "headline_en": h_en,
-                "headline_ar": h_ar,
-                "narration_en": scene["narration_en"],
-                "narration_ar": scene["narration_ar"],
-                "queries": scene.get("visual_queries", ["medical research", "doctor patient", "laboratory"])
+                "is_transition_start": (a_idx == 0),
+                "source_badge": f"BREAKTHROUGH #{idx+1}  |  SOURCE: {article['source'].upper()}",
+                "headline": headline,
+                "narration": act["narration"],
+                "queries": act.get("visual_queries", ["medical research", "doctor patient", "scientist lab", "human health"])
             })
-        time.sleep(5)
+        time.sleep(4)
 
-    # C. Outro (Bilingual)
+    # C. Inspiring YouTube Outro
     outro_prompt = """
-    Write a warm, authoritative 95-word conclusion for a medical documentary in BOTH English and Modern Standard Arabic.
-    Remind viewers that all scientific sources are linked in the description and that this content is for educational purposes, and invite them to subscribe.
+    Write an energetic, inspiring 95-word YouTube conclusion for a medical storytelling episode.
+    Ask the viewer a specific engagement question ("Which of today's 5 breakthroughs surprised you the most? Let us know in the comments below!"), remind them that all verified scientific sources are linked in the description and that this video is for educational purposes, and invite them to subscribe.
     Return ONLY valid JSON:
     {
-      "en_outro": "95 words spoken English conclusion...",
-      "ar_outro": "85 كلمة خاتمة عربية فصيحة ومشوقة...",
-      "visual_queries": ["doctor talking patient", "modern hospital building", "healthy active lifestyle"]
+      "outro_narration": "95 words spoken English conclusion only...",
+      "visual_queries": ["happy healthy people", "doctor smiling hospital", "modern medical technology", "active lifestyle running"]
     }
     """
     outro_data = clean_json_response(ask_gemini(outro_prompt))
     segments.append({
         "is_transition_start": True,
-        "source_badge_en": "VERIFIED MEDICAL SOURCES IN DESCRIPTION",
-        "source_badge_ar": "المصادر العلمية موثقة في صندوق الوصف",
-        "headline_en": "SUBSCRIBE FOR DAILY MEDICAL BREAKTHROUGHS",
-        "headline_ar": "اشترك في القناة لمتابعة أحدث الاكتشافات الطبية يومياً",
-        "narration_en": outro_data["en_outro"],
-        "narration_ar": outro_data["ar_outro"],
-        "queries": outro_data.get("visual_queries", ["doctor smiling", "healthy lifestyle", "hospital"])
+        "source_badge": "VERIFIED SCIENTIFIC LINKS IN DESCRIPTION",
+        "headline": "WHICH BREAKTHROUGH SURPRISED YOU MOST? COMMENT BELOW!",
+        "narration": outro_data["outro_narration"],
+        "queries": outro_data.get("visual_queries", ["doctor smiling", "healthy lifestyle", "hospital", "medical technology"])
     })
 
     return meta_data, segments
 
-# ==================== 5. VOICEOVER ENGINE & DURATION PROBE ====================
-async def _generate_tts(text, voice, output_file):
-    communicate = edge_tts.Communicate(text, voice, rate="-3%", pitch="-2Hz")
+# ==================== 5. ENERGETIC AMERICAN NARRATOR (+4% PACING) ====================
+async def _generate_tts(text, output_file):
+    # +4% rate gives engaging, energetic YouTube documentary pacing (never slow or robotic!)
+    communicate = edge_tts.Communicate(text, VOICE_EN, rate="+4%", pitch="-1Hz")
     await communicate.save(output_file)
 
-def create_voiceover(text, voice, output_file):
+def create_voiceover(text, output_file):
     clean_text = re.sub(r"[*#_~`]", "", text).strip()
     for attempt in range(3):
         try:
-            asyncio.run(_generate_tts(clean_text, voice, output_file))
+            asyncio.run(_generate_tts(clean_text, output_file))
             if os.path.exists(output_file) and os.path.getsize(output_file) > 1000:
                 return
         except Exception as e:
@@ -326,20 +357,18 @@ def get_media_duration(file_path):
     except Exception:
         return 10.0
 
-# ==================== 6. 100% MOVING VIDEO DOWNLOADER (NO STATIC PHOTOS!) ====================
+# ==================== 6. FAST 100% MOVING VIDEO DOWNLOADER ====================
 def score_video_relevance(video_obj, query):
     slug = video_obj.get("url", "").lower()
     keywords = [w.lower() for w in re.findall(r"\w+", query) if len(w) > 2]
     score = sum(3 for kw in keywords if kw in slug)
     dur = video_obj.get("duration", 0)
-    if 7 <= dur <= 30:
+    if 6 <= dur <= 28:
         score += 2
     return score
 
 def download_strict_video(query, dest_path):
-    """Strictly downloads moving HD MP4 videos only (never static photos) to prevent any screen freeze."""
     headers = {"Authorization": PEXELS_API_KEY}
-    # Try exact query first, then simplified 2-word query, then medical fallback
     words = query.split()
     attempts = [query]
     if len(words) > 2:
@@ -349,7 +378,7 @@ def download_strict_video(query, dest_path):
     for q in attempts:
         url = f"https://api.pexels.com/videos/search?query={urllib.parse.quote(q)}&orientation=landscape&size=medium&per_page=15"
         try:
-            r = requests.get(url, headers=headers, timeout=15)
+            r = http_session.get(url, headers=headers, timeout=15)
             if r.status_code == 200:
                 videos = [v for v in r.json().get("videos", []) if v.get("id") not in used_pexels_ids]
                 videos.sort(key=lambda v: score_video_relevance(v, q), reverse=True)
@@ -359,7 +388,7 @@ def download_strict_video(query, dest_path):
                     for vf in v.get("video_files", []):
                         w = vf.get("width", 0)
                         if 1280 <= w <= 1920 and vf.get("link"):
-                            vid_resp = requests.get(vf["link"], timeout=30)
+                            vid_resp = http_session.get(vf["link"], timeout=30)
                             if vid_resp.status_code == 200 and len(vid_resp.content) > 50000:
                                 with open(dest_path, "wb") as f:
                                     f.write(vid_resp.content)
@@ -369,26 +398,21 @@ def download_strict_video(query, dest_path):
             print(f"Video search note for '{q}': {e}")
     return False
 
-# ==================== 7. BROADCAST GRAPHICS (ENGLISH & ARABIC) ====================
-def shape_arabic_text(text):
-    try:
-        reshaped = arabic_reshaper.reshape(text)
-        return get_display(reshaped)
-    except Exception:
-        return text
-
-def create_broadcast_overlay(headline, source_badge, output_png, lang="en", is_new_report=False):
+# ==================== 7. SLEEK YOUTUBE DOCUMENTARY GRAPHICS ====================
+def create_broadcast_overlay(headline, source_badge, output_png, is_new_story=False):
     img = Image.new("RGBA", (1280, 720), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
 
-    accent_color = (220, 30, 45, 255) if is_new_report else (0, 190, 235, 255)
+    accent_color = (230, 35, 50, 255) if is_new_story else (0, 200, 240, 255)
 
-    # Top-right Channel Badge
-    draw.rectangle([980, 32, 1240, 72], fill=(180, 18, 28, 235))
-    # Lower-Third Broadcast Banner
-    draw.rectangle([0, 600, 1280, 686], fill=(8, 20, 42, 238))
-    draw.rectangle([0, 593, 1280, 600], fill=accent_color)
-    draw.rectangle([40, 560, 560, 595], fill=(0, 125, 175, 255))
+    # Top-right Sleek Badge
+    draw.rectangle([985, 30, 1242, 68], fill=(15, 28, 55, 225))
+    draw.rectangle([985, 30, 992, 68], fill=accent_color)
+
+    # Modern Lower-Third Overlay
+    draw.rectangle([0, 604, 1280, 688], fill=(8, 18, 38, 235))
+    draw.rectangle([0, 597, 1280, 604], fill=accent_color)
+    draw.rectangle([40, 562, 600, 597], fill=(0, 130, 180, 255))
 
     try:
         font_badge = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 17)
@@ -397,59 +421,41 @@ def create_broadcast_overlay(headline, source_badge, output_png, lang="en", is_n
         font_badge = ImageFont.load_default()
         font_main = ImageFont.load_default()
 
-    if lang == "ar":
-        top_txt = shape_arabic_text("النشرة الطبية العالمية")
-        src_txt = shape_arabic_text(source_badge[:55])
-        main_txt = shape_arabic_text(headline[:68])
-        draw.text((1005, 41), top_txt, fill=(255, 255, 255, 255), font=font_badge)
-        draw.text((55, 568), src_txt, fill=(255, 255, 255, 255), font=font_badge)
-        draw.text((55, 626), main_txt, fill=(255, 255, 255, 255), font=font_main)
-    else:
-        draw.text((1005, 42), "MEDICAL REPORT HD", fill=(255, 255, 255, 255), font=font_badge)
-        draw.text((55, 569), source_badge[:55], fill=(255, 255, 255, 255), font=font_badge)
-        draw.text((45, 628), headline[:68], fill=(255, 255, 255, 255), font=font_main)
-
+    draw.text((1005, 40), "MEDICAL SCIENCE HD", fill=(255, 255, 255, 255), font=font_badge)
+    draw.text((55, 571), source_badge[:60], fill=(255, 255, 255, 255), font=font_badge)
+    draw.text((45, 630), headline[:66], fill=(255, 255, 255, 255), font=font_main)
     img.save(output_png)
 
-# ==================== 8. FFMPEG ANTI-FREEZE STUDIO RENDERER ====================
-def prepare_scene_raw_videos(idx, queries):
-    """Downloads 3 moving videos once per scene so both English and Arabic versions reuse them."""
-    scene_queries = list(queries)
-    while len(scene_queries) < 3:
+# ==================== 8. FAST-PACED 4-CUT FFMPEG RENDERER (ZERO FREEZE) ====================
+def render_scene(idx, segment):
+    audio_path = f"temp/audio_{idx}.mp3"
+    overlay_path = f"temp/overlay_{idx}.png"
+    out_segment = f"temp/seg_{idx:03d}.mp4"
+
+    is_trans = segment.get("is_transition_start", False)
+
+    create_voiceover(segment["narration"], audio_path)
+    audio_dur = get_media_duration(audio_path)
+    target_dur = audio_dur + 0.40
+
+    create_broadcast_overlay(segment["headline"], segment["source_badge"], overlay_path, is_new_story=is_trans)
+
+    # 4 dynamic visual cuts per scene (~6 seconds per cut) for high viewer retention!
+    scene_queries = list(segment["queries"])
+    while len(scene_queries) < 4:
         scene_queries.append(random.choice(FALLBACK_VIDEO_QUERIES))
 
     raw_files = []
-    for q_idx, q in enumerate(scene_queries[:3]):
+    for q_idx, q in enumerate(scene_queries[:4]):
         raw_path = f"temp/raw_{idx}_{q_idx}.mp4"
-        if not os.path.exists(raw_path):
-            download_strict_video(q, raw_path)
-        if os.path.exists(raw_path):
+        if download_strict_video(q, raw_path):
             raw_files.append(raw_path)
-    return raw_files
-
-def render_language_segment(idx, segment, raw_files, lang="en"):
-    audio_path = f"temp/audio_{lang}_{idx}.mp3"
-    overlay_path = f"temp/overlay_{lang}_{idx}.png"
-    out_segment = f"temp/seg_{lang}_{idx:03d}.mp4"
-
-    narration = segment["narration_en"] if lang == "en" else segment["narration_ar"]
-    voice = VOICE_EN if lang == "en" else VOICE_AR
-    headline = segment["headline_en"] if lang == "en" else segment["headline_ar"]
-    badge = segment["source_badge_en"] if lang == "en" else segment["source_badge_ar"]
-    is_trans = segment.get("is_transition_start", False)
-
-    create_voiceover(narration, voice, audio_path)
-    audio_dur = get_media_duration(audio_path)
-    target_dur = audio_dur + 0.45
-
-    create_broadcast_overlay(headline, badge, overlay_path, lang=lang, is_new_report=is_trans)
 
     slot_dur = target_dur / max(len(raw_files), 1)
     slot_clips = []
 
     for r_idx, r_path in enumerate(raw_files):
-        slot_out = f"temp/slot_{lang}_{idx}_{r_idx}.mp4"
-        # Native FFmpeg infinite loop + exact cut: NEVER freezes frames!
+        slot_out = f"temp/slot_{idx}_{r_idx}.mp4"
         subprocess.run([
             "ffmpeg", "-y", "-stream_loop", "-1", "-i", r_path,
             "-t", f"{slot_dur:.2f}",
@@ -459,24 +465,23 @@ def render_language_segment(idx, segment, raw_files, lang="en"):
         ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         slot_clips.append(slot_out)
 
-    concat_slots_txt = f"temp/slots_{lang}_{idx}.txt"
+    concat_slots_txt = f"temp/slots_{idx}.txt"
     with open(concat_slots_txt, "w") as f:
         for sc in slot_clips:
             f.write(f"file '{os.path.abspath(sc)}'\n")
 
-    bg_joined = f"temp/bg_{lang}_{idx}.mp4"
+    bg_joined = f"temp/bg_{idx}.mp4"
     subprocess.run([
         "ffmpeg", "-y", "-f", "concat", "-safe", "0",
         "-i", concat_slots_txt, "-c", "copy", bg_joined
     ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-    # Apply smooth cinematic fade-in on new story transitions & fade-out at segment end
-    fade_in_dur = 0.75 if is_trans else 0.25
-    fade_out_start = max(0.1, target_dur - 0.35)
+    fade_in_dur = 0.80 if is_trans else 0.20
+    fade_out_start = max(0.1, target_dur - 0.30)
     filter_chain = (
         f"[0:v][1:v]overlay=0:0,"
         f"fade=t=in:st=0:d={fade_in_dur},"
-        f"fade=t=out:st={fade_out_start:.2f}:d=0.35[v]"
+        f"fade=t=out:st={fade_out_start:.2f}:d=0.30[v]"
     )
 
     subprocess.run([
@@ -495,63 +500,40 @@ def render_language_segment(idx, segment, raw_files, lang="en"):
 
     return out_segment, target_dur
 
-# ==================== 9. SAVE BILINGUAL YOUTUBE DETAILS WITH SOURCES ====================
+# ==================== 9. SAVE READY YOUTUBE DETAILS WITH SOURCES ====================
 def format_time(seconds):
     m = int(seconds // 60)
     s = int(seconds % 60)
     return f"{m:02d}:{s:02d}"
 
-def save_bilingual_package(meta_data, en_chapters, ar_chapters, articles):
-    en_tags = ", ".join(meta_data.get("en_tags", ["medical news", "health"]))
-    ar_tags = ", ".join(meta_data.get("ar_tags", ["أخبار الطب", "صحة"]))
-    en_ch_str = "\n".join(en_chapters)
-    ar_ch_str = "\n".join(ar_chapters)
-    sources_list = "\n".join([f"• Story #{i+1} ({a['source']}): {a['title']}\n  {a['link']}" for i, a in enumerate(articles)])
+def save_youtube_package(meta_data, chapters, articles):
+    tags_str = ", ".join(meta_data.get("youtube_tags", ["medical breakthroughs", "health science", "medicine"]))
+    chapters_str = "\n".join(chapters)
+    sources_list = "\n".join([f"• Breakthrough #{i+1} ({a['source']}): {a['title']}\n  {a['link']}" for i, a in enumerate(articles)])
 
     content = f"""====================================================================
-🇺🇸🇬🇧 1. ENGLISH YOUTUBE PACKAGE (Download: english_video.mp4)
+🎬 READY-TO-COPY YOUTUBE PACKAGE (HIGH-RETENTION STORYTELLING)
 ====================================================================
 
-📌 ENGLISH TITLE:
-{meta_data.get('en_title', 'Latest Medical Breakthroughs & Health News')}
+📌 YOUTUBE TITLE (Copy & Paste):
+{meta_data.get('youtube_title', '5 New Medical Breakthroughs Changing Human Health')}
 
-📝 ENGLISH DESCRIPTION:
-{meta_data.get('en_description', '')}
+--------------------------------------------------------------------
+📝 YOUTUBE DESCRIPTION (Copy & Paste):
+{meta_data.get('youtube_description', '')}
 
-⏱️ CHAPTERS:
-{en_ch_str}
+⏱️ VIDEO CHAPTERS:
+{chapters_str}
 
-🔬 SCIENTIFIC SOURCES & REFERENCES CITED IN THIS EPISODE:
+🔬 VERIFIED SCIENTIFIC SOURCES & STUDIES IN THIS EPISODE:
 {sources_list}
 
 ⚠️ Medical Disclaimer:
-This video is for educational and informational purposes only and does not constitute professional medical advice.
+The information provided in this video is for educational and informational purposes only and is not intended as a substitute for professional medical advice, diagnosis, or treatment. Always seek the advice of your physician or other qualified health provider with any questions you may have regarding a medical condition.
 
-🏷️ ENGLISH TAGS:
-{en_tags}
-
-
-====================================================================
-🇸🇦🇪🇬 2. الحزمة العربية لليوتيوب (حمّل ملف: arabic_video.mp4)
-====================================================================
-
-📌 العنوان باللغة العربية:
-{meta_data.get('ar_title', 'أحدث الاكتشافات والأبحاث الطبية العالمية اليوم')}
-
-📝 الوصف باللغة العربية:
-{meta_data.get('ar_description', '')}
-
-⏱️ فصول الفيديو:
-{ar_ch_str}
-
-🔬 المصادر والمراجع العلمية المعتمدة في هذه الحلقة:
-{sources_list}
-
-⚠️ إخلاء مسؤولية طبي:
-المعلومات الواردة في هذا الفيديو هي لأغراض تعليمية وإعلامية فقط ولا تغني عن استشارة الطبيب المختص.
-
-🏷️ الكلمات المفتاحية (Tags):
-{ar_tags}
+--------------------------------------------------------------------
+🏷️ YOUTUBE TAGS (Copy & Paste):
+{tags_str}
 ====================================================================
 """
     with open("youtube_details.txt", "w", encoding="utf-8") as f:
@@ -559,49 +541,32 @@ This video is for educational and informational purposes only and does not const
 
 # ==================== MAIN EXECUTION ====================
 if __name__ == "__main__":
-    articles = fetch_top_medical_news(5)
-    meta_data, segments = build_bilingual_script(articles)
+    articles = fetch_viral_medical_news(5)
+    meta_data, segments = build_storytelling_script(articles)
 
-    en_files, ar_files = [], []
-    en_time, ar_time = 0.0, 0.0
-    en_chapters = ["00:00 Cold Open & Medical Briefing Intro"]
-    ar_chapters = ["00:00 مقدمة تشويقية وعناوين النشرة الطبية"]
+    segment_files = []
+    current_time = 0.0
+    chapters = ["00:00 Cold Open: Today's Biggest Medical Mystery"]
 
     for i, seg in enumerate(segments):
         if i in [1, 5, 9, 13, 17]:
             s_num = ((i - 1) // 4) + 1
             art = articles[s_num - 1]
-            en_chapters.append(f"{format_time(en_time)} Report #{s_num}: {art['title'][:58]} ({art['source']})")
-            ar_chapters.append(f"{format_time(ar_time)} التقرير #{s_num}: {seg['headline_ar']} ({art['source']})")
+            chapters.append(f"{format_time(current_time)} Breakthrough #{s_num}: {seg['headline'].title()} ({art['source']})")
 
-        print(f"Processing Scene {i+1}/{len(segments)} (Downloading HD Moving Visuals + Rendering EN & AR)...")
-        raw_vids = prepare_scene_raw_videos(i, seg["queries"])
+        print(f"Rendering Fast-Paced Storytelling Scene {i+1}/{len(segments)}...")
+        seg_file, seg_dur = render_scene(i, seg)
+        segment_files.append(seg_file)
+        current_time += seg_dur
 
-        en_seg, en_dur = render_language_segment(i, seg, raw_vids, lang="en")
-        en_files.append(en_seg)
-        en_time += en_dur
-
-        ar_seg, ar_dur = render_language_segment(i, seg, raw_vids, lang="ar")
-        ar_files.append(ar_seg)
-        ar_time += ar_dur
-
-    # Merge English Video
-    with open("temp/concat_en.txt", "w") as f:
-        for sf in en_files:
+    with open("temp/concat_list.txt", "w") as f:
+        for sf in segment_files:
             f.write(f"file '{os.path.abspath(sf)}'\n")
+
     subprocess.run([
         "ffmpeg", "-y", "-f", "concat", "-safe", "0",
-        "-i", "temp/concat_en.txt", "-c", "copy", "-movflags", "+faststart", "english_video.mp4"
+        "-i", "temp/concat_list.txt", "-c", "copy", "-movflags", "+faststart", "final_video.mp4"
     ], check=True)
 
-    # Merge Arabic Video
-    with open("temp/concat_ar.txt", "w") as f:
-        for sf in ar_files:
-            f.write(f"file '{os.path.abspath(sf)}'\n")
-    subprocess.run([
-        "ffmpeg", "-y", "-f", "concat", "-safe", "0",
-        "-i", "temp/concat_ar.txt", "-c", "copy", "-movflags", "+faststart", "arabic_video.mp4"
-    ], check=True)
-
-    save_bilingual_package(meta_data, en_chapters, ar_chapters, articles)
-    print(f"SUCCESS! Both compressed HD videos ready: english_video.mp4 ({format_time(en_time)}) & arabic_video.mp4 ({format_time(ar_time)})")
+    save_youtube_package(meta_data, chapters, articles)
+    print(f"SUCCESS! High-Retention Compressed HD Video Ready: final_video.mp4 ({format_time(current_time)})")
