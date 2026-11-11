@@ -44,24 +44,21 @@ jobs:
             rm -f /tmp/ffmpeg.tar.xz
           fi
           sudo mkdir -p /usr/share/fonts/truetype/dejavu
-          SYS_BOLD=$(find /usr/share/fonts -iname "*bold*.ttf" | head -n 1)
-          SYS_REG=$(find /usr/share/fonts -iname "*.ttf" ! -iname "*bold*" | head -n 1)
-          if [ -z "$SYS_BOLD" ]; then SYS_BOLD="$SYS_REG"; fi
-          if [ ! -f /usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf ] && [ -n "$SYS_BOLD" ]; then
-            sudo cp "$SYS_BOLD" /usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf
+          if [ ! -f /usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf ] || [ ! -f /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf ]; then
+            curl -L --retry 3 --connect-timeout 15 -o /tmp/dejavu.tar.bz2 "https://github.com/dejavu-fonts/dejavu-fonts/releases/download/version_2_37/dejavu-fonts-ttf-2.37.tar.bz2"
+            sudo tar -xjf /tmp/dejavu.tar.bz2 -C /usr/share/fonts/truetype/dejavu --strip-components=2 --wildcards "*/ttf/DejaVuSans-Bold.ttf" "*/ttf/DejaVuSans.ttf"
+            rm -f /tmp/dejavu.tar.bz2
           fi
-          if [ ! -f /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf ] && [ -n "$SYS_REG" ]; then
-            sudo cp "$SYS_REG" /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf
-          fi
-          ffmpeg -version | head -n 1
-          ffprobe -version | head -n 1
-          echo "✅ FFmpeg, FFprobe & Fonts verified and ready!"
+          ls -la /usr/share/fonts/truetype/dejavu/
+          echo "✅ FFmpeg, FFprobe & DejaVu Fonts verified and ready!"
 
       - name: Run AI Agent (Full Features + Thumbnail + Fast Render)
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
         run: |
+          # Remove deprecated -vsync flag automatically for FFmpeg 8 compatibility
+          sed -i 's/"-vsync", "cfr",//g' main.py
           python -u main.py
 
       - name: Publish Video & Thumbnail to GitHub Releases
@@ -87,8 +84,9 @@ jobs:
           git config --global user.email "actions@github.com"
           git fetch origin main
           git reset --hard origin/main
+          sed -i 's/"-vsync", "cfr",//g' main.py
           cp /tmp/used_news_backup.txt used_news.txt || true
           cp /tmp/used_videos_backup.txt used_videos.txt || true
-          git add used_news.txt used_videos.txt
-          git diff --staged --quiet || git commit -m "Update memory: used news and video clips [skip ci]"
+          git add main.py used_news.txt used_videos.txt
+          git diff --staged --quiet || git commit -m "Update memory & FFmpeg compatibility [skip ci]"
           git push origin main
