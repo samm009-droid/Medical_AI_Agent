@@ -8,7 +8,6 @@ on:
     - cron: '0 20 * * 0'
   workflow_dispatch:
 
-# Cancel any stuck old run if a new one is triggered
 concurrency:
   group: medical-video-generator
   cancel-in-progress: true
@@ -19,7 +18,7 @@ permissions:
 jobs:
   build_video:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 90
 
     steps:
       - name: Checkout Repository
@@ -32,11 +31,9 @@ jobs:
 
       - name: Install System Media Tools (FFmpeg & Fonts)
         run: |
-          echo "Checking pre-installed media tools..."
           if command -v ffmpeg >/dev/null 2>&1 && [ -f /usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf ]; then
             echo "✅ FFmpeg and DejaVu fonts are already pre-installed! Skipping apt-get (0 seconds)."
           else
-            echo "Installing missing tools with strict timeout..."
             sudo DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 -o Acquire::Retries=2 update
             sudo DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 install -y --no-install-recommends ffmpeg fonts-dejavu-core
           fi
@@ -46,7 +43,7 @@ jobs:
           pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run AI Agent (Turbo Mode - English + Thumbnail)
+      - name: Run AI Agent (Single-Pass Turbo Mode)
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
