@@ -39,7 +39,7 @@ jobs:
           pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run Medical AI Agent (Generate Compressed High-Retention HD Video)
+      - name: Run Medical AI Agent (Generate Pro-Transition HD Video)
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
@@ -57,17 +57,17 @@ jobs:
             --title "🎬 Medical Episode ($TITLE_DATE)" \
             --notes-file youtube_details.txt
 
-      - name: Save Agent Memory Safely (Prevent Duplicate News)
+      - name: Save Agent News & Video Memory Safely (Zero Repetition)
         continue-on-error: true
         run: |
           git config user.name "Medical-AI-Bot"
           git config user.email "bot@github.com"
-          if [ -f used_news.txt ]; then
-            cp used_news.txt /tmp/used_news_backup.txt
-            git fetch origin main
-            git reset --hard origin/main
-            cp /tmp/used_news_backup.txt used_news.txt
-            git add used_news.txt
-            git diff --staged --quiet || git commit -m "Update used medical news memory"
-            git push origin main || true
-          fi
+          cp used_news.txt /tmp/used_news_backup.txt 2>/dev/null || true
+          cp used_videos.txt /tmp/used_videos_backup.txt 2>/dev/null || true
+          git fetch origin main
+          git reset --hard origin/main
+          cp /tmp/used_news_backup.txt used_news.txt 2>/dev/null || true
+          cp /tmp/used_videos_backup.txt used_videos.txt 2>/dev/null || true
+          git add used_news.txt used_videos.txt 2>/dev/null || true
+          git diff --staged --quiet || git commit -m "Update permanent news and video clip memory"
+          git push origin main || true
