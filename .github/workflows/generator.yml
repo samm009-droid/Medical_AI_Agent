@@ -1,24 +1,25 @@
-name: Daily Medical Video AI Agent
+name: Generate Medical Video
 
 on:
-  workflow_dispatch:
   schedule:
-    # 1. Daily Video (Monday to Sunday) at Peak US/Europe Overlap (16:00 UTC)
+    # Daily every day at 16:00 UTC
     - cron: '0 16 * * *'
-    # 2. Second Sunday Video at US/Europe Evening Peak (20:00 UTC on Sundays)
+    # Extra Sunday episode at 20:00 UTC (2 videos on Sunday)
     - cron: '0 20 * * 0'
+  workflow_dispatch:
 
+# Cancel any stuck old run if a new one is triggered
 concurrency:
-  group: medical-video-agent
-  cancel-in-progress: false
+  group: medical-video-generator
+  cancel-in-progress: true
 
 permissions:
   contents: write
 
 jobs:
-  build_medical_video:
+  build_video:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 35
 
     steps:
       - name: Checkout Repository
@@ -31,43 +32,52 @@ jobs:
 
       - name: Install System Media Tools (FFmpeg & Fonts)
         run: |
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg fonts-dejavu-core
+          echo "Checking pre-installed media tools..."
+          if command -v ffmpeg >/dev/null 2>&1 && [ -f /usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf ]; then
+            echo "✅ FFmpeg and DejaVu fonts are already pre-installed! Skipping apt-get (0 seconds)."
+          else
+            echo "Installing missing tools with strict timeout..."
+            sudo DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 -o Acquire::Retries=2 update
+            sudo DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 install -y --no-install-recommends ffmpeg fonts-dejavu-core
+          fi
 
-      - name: Install AI Agent Dependencies
+      - name: Install Python Libraries
         run: |
           pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run Medical AI Agent (Generate Video + Custom Thumbnail)
+      - name: Run AI Agent (Turbo Mode - English + Thumbnail)
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
         run: |
-          python main.py
-          ls -lh final_video.mp4 thumbnail.jpg
+          python -u main.py
 
-      - name: Publish Video, Thumbnail & YouTube Details for Mobile Download
+      - name: Publish Video & Thumbnail to GitHub Releases
+        if: success()
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TAG_NAME="video-$(date +'%Y-%m-%d-%H%M%S')"
-          TITLE_DATE="$(date +'%Y-%m-%d %H:%M') UTC"
-          gh release create "$TAG_NAME" final_video.mp4 thumbnail.jpg \
-            --title "🎬 Medical Episode ($TITLE_DATE)" \
-            --notes-file youtube_details.txt
+          TAG_NAME="episode-$(date +'%Y-%m-%d-%H-%M')"
+          TITLE_DATE="$(date +'%Y-%m-%d %H:%M UTC')"
+          if [ -f thumbnail.jpg ]; then
+            gh release create "$TAG_NAME" final_video.mp4 thumbnail.jpg --title "🎬 Medical Episode ($TITLE_DATE)" --notes-file youtube_details.txt
+          else
+            gh release create "$TAG_NAME" final_video.mp4 --title "🎬 Medical Episode ($TITLE_DATE)" --notes-file youtube_details.txt
+          fi
 
-      - name: Save Agent News & Video Memory Safely (Zero Repetition)
+      - name: Save Memory (Prevent Repeating News & Video Clips)
+        if: success()
         continue-on-error: true
         run: |
-          git config user.name "Medical-AI-Bot"
-          git config user.email "bot@github.com"
-          cp used_news.txt /tmp/used_news_backup.txt 2>/dev/null || true
-          cp used_videos.txt /tmp/used_videos_backup.txt 2>/dev/null || true
+          cp used_news.txt /tmp/used_news_backup.txt || true
+          cp used_videos.txt /tmp/used_videos_backup.txt || true
+          git config --global user.name "Medical AI Agent"
+          git config --global user.email "actions@github.com"
           git fetch origin main
           git reset --hard origin/main
-          cp /tmp/used_news_backup.txt used_news.txt 2>/dev/null || true
-          cp /tmp/used_videos_backup.txt used_videos.txt 2>/dev/null || true
-          git add used_news.txt used_videos.txt 2>/dev/null || true
-          git diff --staged --quiet || git commit -m "Update permanent news and video clip memory"
-          git push origin main || true
+          cp /tmp/used_news_backup.txt used_news.txt || true
+          cp /tmp/used_videos_backup.txt used_videos.txt || true
+          git add used_news.txt used_videos.txt
+          git diff --staged --quiet || git commit -m "Update memory: used news and video clips [skip ci]"
+          git push origin main
