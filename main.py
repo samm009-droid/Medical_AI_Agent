@@ -2,7 +2,6 @@ import os
 import re
 import json
 import time
-import shutil
 import asyncio
 import calendar
 import subprocess
@@ -22,14 +21,14 @@ if not GEMINI_API_KEY:
 if not PEXELS_API_KEY:
     raise ValueError("❌ PEXELS_API_KEY is missing! Check GitHub Secrets.")
 
-genai.configure(api_key=GEMINI_API_KEY, transport="rest")
+genai.configure(api_key=GEMINI_API_KEY)
 
 USED_NEWS_FILE = "used_news.txt"
 USED_VIDEOS_FILE = "used_videos.txt"
 WORK_DIR = "build_workspace"
 os.makedirs(WORK_DIR, exist_ok=True)
 
-VOICE_EN = "en-US-ChristopherNeural"
+VOICE_NAME = "en-US-ChristopherNeural"
 
 RSS_FEEDS = [
     ("MedicalXpress", "https://medicalxpress.com/rss-feed/"),
@@ -42,17 +41,6 @@ RSS_FEEDS = [
 
 FONT_BOLD = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
 FONT_REG = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
-
-# Universal FFmpeg 4.x - 8.x encoding flags (No deprecated -vsync flag)
-VIDEO_ENC_FLAGS = [
-    "-c:v", "libx264",
-    "-preset", "superfast",
-    "-crf", "27",
-    "-maxrate", "950k",
-    "-bufsize", "1900k",
-    "-pix_fmt", "yuv420p",
-    "-r", "24",
-]
 
 
 # ==============================================================================
@@ -78,9 +66,9 @@ def clean_html(raw_html):
 
 
 # ==============================================================================
-# 3. FETCH LATEST RSS CANDIDATES FOR VIRAL CURATION
+# 3. FETCH 5 FRESH, REAL-TIME MEDICAL BREAKTHROUGHS
 # ==============================================================================
-def fetch_candidate_medical_news(candidate_limit=28):
+def fetch_latest_medical_news(count=5):
     print("📡 Fetching global medical & research feeds (Real-Time)...")
     used_titles = load_set(USED_NEWS_FILE)
     candidates = []
@@ -92,7 +80,7 @@ def fetch_candidate_medical_news(candidate_limit=28):
 
     for source_name, url in RSS_FEEDS:
         try:
-            resp = requests.get(url, headers=headers, timeout=12)
+            resp = requests.get(url, headers=headers, timeout=15)
             if resp.status_code != 200:
                 continue
             feed = feedparser.parse(resp.content)
@@ -113,7 +101,7 @@ def fetch_candidate_medical_news(candidate_limit=28):
                     "source": source_name,
                     "title": title,
                     "link": link,
-                    "summary": summary[:650],
+                    "summary": summary[:700],
                     "pub_date": pub_date_str,
                     "timestamp": timestamp
                 })
@@ -121,17 +109,19 @@ def fetch_candidate_medical_news(candidate_limit=28):
             print(f"⚠️ Warning fetching {source_name}: {e}")
 
     candidates.sort(key=lambda x: x["timestamp"], reverse=True)
-    top_pool = candidates[:candidate_limit]
+    selected = candidates[:count]
 
-    if len(top_pool) < 5:
-        raise RuntimeError("❌ Not enough new medical articles found.")
+    if len(selected) < count:
+        raise RuntimeError(f"❌ Not enough new articles found (found {len(selected)}).")
 
-    print(f"✅ Collected {len(top_pool)} fresh candidate breakthroughs for AI viral selection.")
-    return top_pool
+    print(f"✅ Selected {len(selected)} fresh medical breakthroughs:")
+    for idx, item in enumerate(selected, 1):
+        print(f"  {idx}. [{item['source']} - {item['pub_date']}] {item['title']}")
+    return selected
 
 
 # ==============================================================================
-# 4. GEMINI AI: VIRAL CURATION + HIGH-RETENTION SCRIPT + SCHEMA VALIDATION
+# 4. GEMINI AI: DOCUMENTARY SCRIPT GENERATION
 # ==============================================================================
 def get_working_gemini_model():
     preferred = [
@@ -144,19 +134,19 @@ def get_working_gemini_model():
     try:
         available = [
             m.name.replace("models/", "")
-            for m in genai.list_models(request_options={"timeout": 20})
+            for m in genai.list_models()
             if "generateContent" in getattr(m, "supported_generation_methods", [])
         ]
         for p in preferred:
             if p in available:
-                print(f"🤖 Selected Gemini Model: {p}")
+                print(f"🤖 Using Gemini Model: {p}")
                 return genai.GenerativeModel(p)
         for a in available:
             if "gemini" in a.lower():
-                print(f"🤖 Selected Available Gemini Model: {a}")
+                print(f"🤖 Using Available Gemini Model: {a}")
                 return genai.GenerativeModel(a)
     except Exception as e:
-        print(f"⚠️ list_models notice: {e}")
+        print(f"⚠️ Could not list models dynamically: {e}")
 
     return genai.GenerativeModel("gemini-3-flash-preview")
 
@@ -172,58 +162,14 @@ def extract_json_safely(raw_text):
     return json.loads(text)
 
 
-def validate_and_normalize_script(data):
-    if not isinstance(data, dict):
-        raise ValueError("Root JSON is not an object.")
-
-    intro = data.get("intro", {})
-    intro_narr = intro.get("narration_en") or intro.get("narration") or intro.get("text")
-    if not intro_narr or len(str(intro_narr).strip()) < 20:
-        raise ValueError("Intro narration is missing.")
-    intro["narration_en"] = str(intro_narr).strip()
-    data["intro"] = intro
-
-    outro = data.get("outro", {})
-    outro_narr = outro.get("narration_en") or outro.get("narration") or outro.get("text")
-    if not outro_narr or len(str(outro_narr).strip()) < 20:
-        raise ValueError("Outro narration is missing.")
-    outro["narration_en"] = str(outro_narr).strip()
-    data["outro"] = outro
-
-    stories = data.get("stories", [])
-    if not isinstance(stories, list) or len(stories) != 5:
-        raise ValueError(f"Expected 5 stories, got {len(stories) if isinstance(stories, list) else 0}.")
-
-    for idx, st in enumerate(stories, 1):
-        for act_key in ["act_1", "act_2", "act_3", "act_4"]:
-            act_obj = st.get(act_key)
-            if not isinstance(act_obj, dict):
-                raise ValueError(f"Story #{idx} missing {act_key} object.")
-            narr = (
-                act_obj.get("narration_en")
-                or act_obj.get("narration")
-                or act_obj.get("text")
-                or act_obj.get("script")
-            )
-            if not narr or len(str(narr).strip()) < 15:
-                raise ValueError(f"Story #{idx} {act_key} missing narration_en.")
-            act_obj["narration_en"] = str(narr).strip()
-            if not act_obj.get("headline_en"):
-                act_obj["headline_en"] = act_obj.get("headline") or f"MEDICAL BREAKTHROUGH #{idx}"
-            if not act_obj.get("search_queries") or not isinstance(act_obj.get("search_queries"), list):
-                act_obj["search_queries"] = ["medical research laboratory", "doctor hospital", "dna cells"]
-
-    return data
-
-
-def generate_script_with_gemini(candidates):
-    print("🧠 Gemini AI is selecting the 5 most fascinating stories & writing the script...")
+def generate_script_with_gemini(news_items):
+    print("🧠 Generating high-retention documentary script with Gemini AI...")
     model = get_working_gemini_model()
 
     news_block = ""
-    for i, item in enumerate(candidates, 1):
+    for i, item in enumerate(news_items, 1):
         news_block += (
-            f"\nCANDIDATE #{i}:\n"
+            f"\nSTORY #{i}:\n"
             f"- Source: {item['source']} ({item['pub_date']})\n"
             f"- Title: {item['title']}\n"
             f"- Summary: {item['summary']}\n"
@@ -231,118 +177,100 @@ def generate_script_with_gemini(candidates):
         )
 
     prompt = f"""
-You are the Executive Producer and Lead Storyteller for a viral 5-Million-Subscriber Medical & Longevity YouTube Channel (inspired by Cleo Abram, Veritasium, and Huberman Lab).
-
-Below is a pool of {len(candidates)} real-time medical research candidates published in the last 24-48 hours:
+You are the Lead Producer and Host of a top-tier English Medical & Science YouTube Channel.
+Your task is to write a gripping, conversational, high-retention 13 to 15 minute episode (~2,000 to 2,200 spoken words total) covering these 5 real-time medical breakthroughs:
 {news_block}
 
-STEP 1 — VIRAL STORY SELECTION:
-Out of the {len(candidates)} candidates above, choose the 5 MOST FASCINATING, SHOCKING, and HUMAN-RELEVANT breakthroughs.
-Prioritize breakthroughs about:
-- Everyday habits, sleep, metabolism, brain aging, longevity, cancer, heart health, gut microbiome, or game-changing drugs.
-- Stories that make an ordinary viewer immediately think: "Wait—this affects MY body and MY family!"
-Return their exact candidate numbers in `selected_candidate_indices` (1-based).
+CRITICAL STORYTELLING RULES:
+1. Speak directly to the viewer ("you", "your body") with warmth, excitement, and scientific clarity.
+2. Start the Intro with a unique, surprising Cold-Open Hook question or mystery before welcoming the viewer.
+3. Explicitly cite the scientific source and publication date in the narration for credibility.
+4. Divide EACH of the 5 stories into 4 distinct acts (Act 1: The Discovery, Act 2: How It Works Inside Your Body using a simple everyday analogy, Act 3: The Clinical Proof & Numbers, Act 4: What It Means For Your Future + a 1-sentence cliffhanger for the next story).
+5. For every single act, provide 3 specific visual search queries (2-4 English words each) suitable for finding moving stock footage on Pexels (e.g., "microscope cells dividing", "doctor checking mri", "dna helix glowing").
 
-STEP 2 — HIGH-RETENTION CONVERSATIONAL STORYTELLING:
-Write an unforgettable 13 to 15 minute episode (~2,000 to 2,200 spoken words total).
-CRITICAL STYLE RULES:
-1. NEVER sound like a dry news anchor! Speak directly to one person ("You", "Imagine waking up...", "Right now inside your cells...").
-2. UNIQUE COLD-OPEN HOOK: Start `intro.narration_en` with a gripping, surprising 2-sentence mystery or question inspired by the #1 story BEFORE welcoming viewers to the episode. Never use the same generic opening twice!
-3. EVERYDAY ANALOGIES: Whenever you explain a biological mechanism, use a vivid everyday analogy (e.g., comparing immune cells to security guards with updated mugshots, or mitochondria to tiny rechargeable batteries).
-4. SCIENTIFIC CREDIBILITY: Naturally weave the real source name and date (`According to researchers at... published via MedicalXpress...`) into the story.
-5. CLIFFHANGER BRIDGES: End `act_4` of each story with a 1-sentence teaser that makes the viewer curious about the NEXT story.
-6. THUMBNAIL TEXT: Create a super punchy 2-line YouTube thumbnail hook:
-   - `thumbnail_line1`: 2 to 3 words in ALL CAPS (White text, e.g., "DOCTORS SHOCKED" or "BRAIN RESET")
-   - `thumbnail_line2`: 2 to 3 words in ALL CAPS (Yellow text, e.g., "NEW SLEEP CURE!" or "CELLS REVERSED!")
-   - `thumbnail_search_query`: 2-3 visual keywords for a striking medical background (e.g., "glowing brain neuron doctor").
-
-OUTPUT STRICTLY VALID JSON matching this exact structure (every act MUST have "narration_en", "headline_en", and "search_queries"):
+Return STRICTLY valid JSON (no markdown code blocks) with this exact structure:
 {{
-  "selected_candidate_indices": [1, 3, 5, 8, 12],
   "youtube_title": "Viral, curiosity-driven YouTube title (under 90 chars)",
-  "youtube_description_intro": "Engaging 3-sentence hook for the YouTube description box.",
-  "youtube_tags": ["medical breakthroughs", "health news", "longevity", "science news", "medical research"],
-  "thumbnail_line1": "BRAIN AGING",
-  "thumbnail_line2": "REVERSED?!",
-  "thumbnail_search_query": "glowing brain neurology scan",
+  "youtube_description_intro": "Engaging 3-sentence summary for YouTube description.",
+  "youtube_tags": ["medical news", "health breakthroughs", "science news", "longevity", "medical research"],
   "intro": {{
-    "narration_en": "140-160 words. Start IMMEDIATELY with a shocking cold-open hook/question, then welcome the viewer and tease the 5 breakthroughs.",
-    "headline_en": "5 BREAKTHROUGHS CHANGING HUMAN HEALTH",
-    "subheadline_en": "Verified Clinical & Research Report",
-    "search_queries": ["cinematic hospital doctor", "dna double helix glowing", "medical laboratory scientist"]
+    "narration": "140-160 words. Start with a shocking Cold-Open hook, then welcome viewers and preview today's 5 breakthroughs.",
+    "headline": "5 BREAKTHROUGHS CHANGING HUMAN HEALTH",
+    "subheadline": "Verified Clinical & Research Report",
+    "search_queries": ["hospital doctor walking", "medical laboratory scientist", "dna double helix"]
   }},
   "stories": [
     {{
       "story_number": 1,
-      "candidate_index": 1,
-      "chapter_title_en": "Short compelling chapter title (max 52 chars)",
-      "source_citation_en": "Source Name • Date",
+      "chapter_title": "Short compelling title for Story 1 (max 52 chars)",
+      "source_citation": "Source Name • Date",
       "act_1": {{
-        "narration_en": "90-105 words. Hook the viewer with a relatable human problem, then reveal the new discovery and cite the institution/source.",
-        "headline_en": "UPPERCASE HEADLINE (MAX 48 CHARS)",
-        "search_queries": ["specific visual query 1", "specific visual query 2", "specific visual query 3"]
+        "narration": "90-105 words. Hook the viewer with a relatable human problem, then announce the breakthrough and cite the source.",
+        "headline": "SHORT UPPERCASE HEADLINE (MAX 48 CHARS)",
+        "search_queries": ["visual query 1", "visual query 2", "visual query 3"]
       }},
       "act_2": {{
-        "narration_en": "90-105 words. Explain HOW it works inside the body using a brilliant, simple everyday analogy.",
-        "headline_en": "HOW IT WORKS INSIDE YOUR CELLS",
-        "search_queries": ["microscope cells dividing", "bloodstream red blood cells", "brain neurons firing"]
+        "narration": "90-105 words. Explain the biological mechanism inside the body using a vivid everyday analogy.",
+        "headline": "HOW IT WORKS INSIDE YOUR CELLS",
+        "search_queries": ["visual query 1", "visual query 2", "visual query 3"]
       }},
       "act_3": {{
-        "narration_en": "90-105 words. Share the concrete proof from the study, surprising numbers, and why scientists were stunned.",
-        "headline_en": "SURPRISING CLINICAL STUDY RESULTS",
-        "search_queries": ["scientist analyzing data", "medical scanner mri", "laboratory test tubes"]
+        "narration": "90-105 words. Detail the clinical trial results, data, and why researchers were amazed.",
+        "headline": "CLINICAL TRIAL DATA & PROOF",
+        "search_queries": ["visual query 1", "visual query 2", "visual query 3"]
       }},
       "act_4": {{
-        "narration_en": "90-105 words. What this means for YOU and your family, practical takeaway, and a 1-sentence cliffhanger for the next story.",
-        "headline_en": "WHAT THIS MEANS FOR YOUR FUTURE",
-        "search_queries": ["healthy active senior", "doctor consulting patient", "happy family outdoors"]
+        "narration": "90-105 words. Practical impact on patients, future outlook, and a cliffhanger bridge to the next story.",
+        "headline": "WHAT THIS MEANS FOR YOUR HEALTH",
+        "search_queries": ["visual query 1", "visual query 2", "visual query 3"]
       }}
     }}
   ],
   "outro": {{
-    "narration_en": "90-110 words. Inspiring takeaway, question asking viewers which of the 5 discoveries amazed them most in the comments, subscribe reminder, and educational medical disclaimer.",
-    "headline_en": "THE FUTURE OF MEDICINE IS HERE",
-    "subheadline_en": "Subscribe for Daily Evidence-Based Breakthroughs",
-    "search_queries": ["futuristic medicine technology", "doctor smiling camera", "sunrise healthy lifestyle"]
+    "narration": "95-115 words. Inspiring wrap-up, ask viewers which breakthrough amazed them most in the comments, remind to subscribe, and state a clear educational medical disclaimer.",
+    "headline": "THE FUTURE OF MEDICINE IS HERE",
+    "subheadline": "Subscribe for Daily Evidence-Based Breakthroughs",
+    "search_queries": ["futuristic hospital technology", "doctor smiling", "healthy active lifestyle"]
   }}
 }}
 
-IMPORTANT: The `stories` array MUST contain all 5 selected stories (story_number 1 through 5), and every act_1, act_2, act_3, act_4 MUST contain the key `narration_en`.
+Ensure the `stories` list contains all 5 stories (story_number 1 to 5).
 """
 
     last_err = None
-    for attempt in range(4):
+    for attempt in range(3):
         try:
             response = model.generate_content(
                 prompt,
-                generation_config={"temperature": 0.65},
-                request_options={"timeout": 65}
+                generation_config={"temperature": 0.65}
             )
-            raw_data = extract_json_safely(response.text)
-            data = validate_and_normalize_script(raw_data)
-            print("✅ High-retention script & viral selection generated and verified!")
-            return data
+            data = extract_json_safely(response.text)
+            if "stories" in data and len(data["stories"]) == 5:
+                print("✅ Documentary script generated and validated!")
+                return data
+            else:
+                raise ValueError("JSON did not contain 5 stories.")
         except Exception as e:
             last_err = e
-            print(f"⚠️ Gemini attempt {attempt + 1} notice: {e}. Retrying in 4s...")
-            time.sleep(4)
+            print(f"⚠️ Gemini attempt {attempt + 1} failed: {e}. Retrying in 5s...")
+            time.sleep(5)
 
-    raise RuntimeError(f"❌ Failed to generate valid script from Gemini: {last_err}")
+    raise RuntimeError(f"❌ Failed to generate script from Gemini: {last_err}")
 
 
 # ==============================================================================
-# 5. VOICEOVER GENERATION (EDGE-TTS WITH TIMEOUT PROTECTION)
+# 5. VOICEOVER GENERATION (EDGE-TTS)
 # ==============================================================================
-async def _edge_tts_save(text, voice, rate, pitch, out_path):
-    communicate = edge_tts.Communicate(text, voice, rate=rate, pitch=pitch)
-    await asyncio.wait_for(communicate.save(out_path), timeout=45)
+async def _edge_tts_save(text, out_path):
+    communicate = edge_tts.Communicate(text, VOICE_NAME, rate="+4%", pitch="-1Hz")
+    await communicate.save(out_path)
 
 
 def generate_voiceover(text, out_path):
     clean_text = re.sub(r"[*_#`~]", "", str(text)).strip()
     for attempt in range(4):
         try:
-            asyncio.run(_edge_tts_save(clean_text, VOICE_EN, "+4%", "-1Hz", out_path))
+            asyncio.run(_edge_tts_save(clean_text, out_path))
             if os.path.exists(out_path) and os.path.getsize(out_path) > 1000:
                 return
         except Exception as e:
@@ -358,7 +286,7 @@ def get_media_duration(path):
         "-of", "default=noprint_wrappers=1:nokey=1",
         path
     ]
-    res = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+    res = subprocess.run(cmd, capture_output=True, text=True)
     try:
         return max(1.0, float(res.stdout.strip()))
     except Exception:
@@ -366,13 +294,13 @@ def get_media_duration(path):
 
 
 # ==============================================================================
-# 6. PEXELS SMART 720p HD DOWNLOADER (NO 4K BLOAT, NO STATIC PHOTOS)
+# 6. PEXELS STRICT MOVING VIDEO DOWNLOADER (ZERO STATIC PHOTOS)
 # ==============================================================================
 def download_file(url, dest_path):
-    with requests.get(url, stream=True, timeout=20) as r:
+    with requests.get(url, stream=True, timeout=30) as r:
         r.raise_for_status()
         with open(dest_path, "wb") as f:
-            for chunk in r.iter_content(chunk_size=131072):
+            for chunk in r.iter_content(chunk_size=65536):
                 if chunk:
                     f.write(chunk)
 
@@ -400,11 +328,11 @@ def get_pexels_videos_for_scene(queries, count_needed, used_video_ids, scene_pre
             url = "https://api.pexels.com/videos/search"
             params = {
                 "query": q,
-                "per_page": 12,
+                "per_page": 15,
                 "orientation": "landscape",
                 "size": "medium"
             }
-            resp = requests.get(url, headers=headers, params=params, timeout=12)
+            resp = requests.get(url, headers=headers, params=params, timeout=15)
             if resp.status_code != 200:
                 continue
 
@@ -437,11 +365,11 @@ def get_pexels_videos_for_scene(queries, count_needed, used_video_ids, scene_pre
                 )
                 try:
                     download_file(dl_link, clip_path)
-                    if os.path.exists(clip_path) and os.path.getsize(clip_path) > 40000:
+                    if os.path.exists(clip_path) and os.path.getsize(clip_path) > 50000:
                         used_video_ids.add(vid_id)
                         downloaded_clips.append(clip_path)
                 except Exception as e:
-                    print(f"⚠️ Clip download skip: {e}")
+                    print(f"⚠️ Clip download failed: {e}")
         except Exception as e:
             print(f"⚠️ Pexels search error for '{q}': {e}")
 
@@ -449,73 +377,7 @@ def get_pexels_videos_for_scene(queries, count_needed, used_video_ids, scene_pre
 
 
 # ==============================================================================
-# 7. YOUTUBE THUMBNAIL GENERATOR (1280x720 HIGH-CTR DESIGN)
-# ==============================================================================
-def generate_youtube_thumbnail(thumb_query, line1, line2, sample_video_path, out_jpg="thumbnail.jpg"):
-    print("🖼️ Generating High-CTR YouTube Thumbnail (thumbnail.jpg)...")
-    bg_video = sample_video_path
-
-    try:
-        headers = {"Authorization": PEXELS_API_KEY}
-        resp = requests.get(
-            "https://api.pexels.com/videos/search",
-            headers=headers,
-            params={"query": thumb_query, "per_page": 5, "orientation": "landscape"},
-            timeout=10
-        )
-        if resp.status_code == 200:
-            vids = resp.json().get("videos", [])
-            if vids:
-                vfiles = [
-                    vf for vf in vids[0].get("video_files", [])
-                    if vf.get("file_type") == "video/mp4" and vf.get("width", 0) >= 1280
-                ]
-                if vfiles:
-                    tmp_thumb_vid = os.path.join(WORK_DIR, "thumb_bg.mp4")
-                    download_file(vfiles[0]["link"], tmp_thumb_vid)
-                    if os.path.exists(tmp_thumb_vid) and os.path.getsize(tmp_thumb_vid) > 50000:
-                        bg_video = tmp_thumb_vid
-    except Exception:
-        pass
-
-    t1_file = os.path.join(WORK_DIR, "thumb_t1.txt")
-    t2_file = os.path.join(WORK_DIR, "thumb_t2.txt")
-    t3_file = os.path.join(WORK_DIR, "thumb_t3.txt")
-
-    with open(t1_file, "w", encoding="utf-8") as f:
-        f.write("BREAKING MEDICAL DISCOVERY")
-    with open(t2_file, "w", encoding="utf-8") as f:
-        f.write(str(line1).upper()[:22])
-    with open(t3_file, "w", encoding="utf-8") as f:
-        f.write(str(line2).upper()[:22])
-
-    vf = (
-        f"scale=1280:720:force_original_aspect_ratio=increase,crop=1280:720,"
-        f"eq=contrast=1.18:saturation=1.25:brightness=-0.06,"
-        f"drawbox=x=0:y=390:w=1280:h=330:color=#050b14@0.82:t=fill,"
-        f"drawbox=x=0:y=390:w=1280:h=8:color=#00f5d4@1.0:t=fill,"
-        f"drawbox=x=48:y=420:w=490:h=48:color=#e63946@1.0:t=fill,"
-        f"drawtext=fontfile='{FONT_BOLD}':textfile='{t1_file}':fontcolor=white:fontsize=25:x=64:y=432,"
-        f"drawtext=fontfile='{FONT_BOLD}':textfile='{t2_file}':fontcolor=white:fontsize=78:x=50:y=490:shadowcolor=black@0.9:shadowx=4:shadowy=4,"
-        f"drawtext=fontfile='{FONT_BOLD}':textfile='{t3_file}':fontcolor=#ffd166:fontsize=84:x=50:y=590:shadowcolor=black@0.9:shadowx=4:shadowy=4"
-    )
-
-    if bg_video and os.path.exists(bg_video):
-        cmd = [
-            "ffmpeg", "-y", "-ss", "00:00:01.50", "-i", bg_video,
-            "-frames:v", "1", "-vf", vf, "-q:v", "2", out_jpg
-        ]
-    else:
-        cmd = [
-            "ffmpeg", "-y", "-f", "lavfi", "-i", "color=c=#0a1526:s=1280x720",
-            "-frames:v", "1", "-vf", vf, "-q:v", "2", out_jpg
-        ]
-
-    subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=25)
-
-
-# ==============================================================================
-# 8. SINGLE-PASS BROADCAST RENDERING (FAST & RELIABLE)
+# 7. FFMPEG BROADCAST RENDERING (CHAPTER BUMPERS + LOWER-THIRDS)
 # ==============================================================================
 def write_text_file(filename, content):
     clean = re.sub(r"\s+", " ", str(content)).strip()
@@ -540,7 +402,7 @@ def create_chapter_bumper(story_num, title_text, source_text, out_path):
         f"drawtext=fontfile='{FONT_BOLD}':textfile='{f_badge}':fontcolor=#00f5d4:fontsize=30:x=130:y=240,"
         f"drawtext=fontfile='{FONT_BOLD}':textfile='{f_title}':fontcolor=white:fontsize=38:x=130:y=315,"
         f"drawtext=fontfile='{FONT_REG}':textfile='{f_src}':fontcolor=#ffd166:fontsize=23:x=130:y=415,"
-        f"fade=t=in:st=0:d=0.30,fade=t=out:st=2.05:d=0.35"
+        f"fade=t=in:st=0:d=0.35,fade=t=out:st=2.0:d=0.4"
     )
 
     af = (
@@ -556,12 +418,12 @@ def create_chapter_bumper(story_num, title_text, source_text, out_path):
         "-f", "lavfi", "-i", f"color=c=#080e18:s=1280x720:r=24:d={dur}",
         "-f", "lavfi", "-i", af,
         "-vf", vf,
-        *VIDEO_ENC_FLAGS,
+        "-c:v", "libx264", "-preset", "ultrafast", "-crf", "25", "-pix_fmt", "yuv420p",
         "-c:a", "aac", "-ar", "44100", "-ac", "2", "-b:a", "128k",
         "-t", str(dur),
         out_path
     ]
-    subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30)
+    subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
 def render_scene_ffmpeg(
@@ -578,6 +440,56 @@ def render_scene_ffmpeg(
     num_clips = max(1, len(video_clips))
     slot_dur = dur / num_clips
 
+    sub_videos = []
+    for idx, clip_path in enumerate(video_clips):
+        sub_out = os.path.join(WORK_DIR, f"{scene_id}_sub_{idx}.mp4")
+        fade_out_st = max(0.1, slot_dur - 0.35)
+
+        vf = (
+            f"scale=1280:720:force_original_aspect_ratio=increase,"
+            f"crop=1280:720,setsar=1,fps=24,format=yuv420p,"
+            f"fade=t=in:st=0:d=0.35,"
+            f"fade=t=out:st={fade_out_st:.2f}:d=0.35"
+        )
+
+        cmd_sub = [
+            "ffmpeg", "-y",
+            "-stream_loop", "-1",
+            "-t", f"{slot_dur:.2f}",
+            "-i", clip_path,
+            "-t", f"{slot_dur:.2f}",
+            "-vf", vf,
+            "-c:v", "libx264", "-preset", "ultrafast", "-crf", "25",
+            "-an",
+            sub_out
+        ]
+        try:
+            subprocess.run(cmd_sub, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            sub_videos.append(sub_out)
+        except Exception as e:
+            print(f"⚠️ Sub-clip render warning: {e}")
+
+    if not sub_videos:
+        fallback_v = os.path.join(WORK_DIR, f"{scene_id}_fallback.mp4")
+        subprocess.run([
+            "ffmpeg", "-y", "-f", "lavfi",
+            "-i", f"color=c=#101d30:s=1280x720:r=24:d={dur:.2f}",
+            "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
+            fallback_v
+        ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        sub_videos.append(fallback_v)
+
+    concat_list_file = os.path.join(WORK_DIR, f"{scene_id}_subs.txt")
+    with open(concat_list_file, "w", encoding="utf-8") as f:
+        for sv in sub_videos:
+            f.write(f"file '{os.path.abspath(sv)}'\n")
+
+    bg_joined = os.path.join(WORK_DIR, f"{scene_id}_bg.mp4")
+    subprocess.run([
+        "ffmpeg", "-y", "-f", "concat", "-safe", "0",
+        "-i", concat_list_file, "-c", "copy", bg_joined
+    ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
     tf_stage = os.path.join(WORK_DIR, f"{scene_id}_stage.txt")
     tf_title = os.path.join(WORK_DIR, f"{scene_id}_title.txt")
     tf_sub = os.path.join(WORK_DIR, f"{scene_id}_sub.txt")
@@ -586,192 +498,86 @@ def render_scene_ffmpeg(
     write_text_file(tf_title, str(headline).upper()[:54])
     write_text_file(tf_sub, str(subheadline)[:72])
 
-    sub_videos = []
-    for idx, clip_path in enumerate(video_clips):
-        sub_out = os.path.join(WORK_DIR, f"{scene_id}_sub_{idx}.mp4")
-        fade_out_st = max(0.1, slot_dur - 0.35)
+    overlay_vf = (
+        f"drawbox=x=0:y=585:w=1280:h=135:color=#070d17@0.88:t=fill,"
+        f"drawbox=x=0:y=585:w=1280:h=5:color={accent}@1.0:t=fill,"
+        f"drawbox=x=38:y=602:w=10:h=96:color={accent}@1.0:t=fill,"
+        f"drawtext=fontfile='{FONT_BOLD}':textfile='{tf_stage}':fontcolor={accent}:fontsize=21:x=66:y=604,"
+        f"drawtext=fontfile='{FONT_BOLD}':textfile='{tf_title}':fontcolor=white:fontsize=31:x=66:y=634,"
+        f"drawtext=fontfile='{FONT_REG}':textfile='{tf_sub}':fontcolor=#ffd166:fontsize=21:x=66:y=676"
+    )
 
-        vf_filter = (
-            f"scale=1280:720:force_original_aspect_ratio=increase,"
-            f"crop=1280:720,setsar=1,fps=24,format=yuv420p,"
-            f"fade=t=in:st=0:d=0.35,"
-            f"fade=t=out:st={fade_out_st:.2f}:d=0.35,"
-            f"drawbox=x=0:y=585:w=1280:h=135:color=#070d17@0.88:t=fill,"
-            f"drawbox=x=0:y=585:w=1280:h=5:color={accent}@1.0:t=fill,"
-            f"drawbox=x=38:y=602:w=10:h=96:color={accent}@1.0:t=fill,"
-            f"drawtext=fontfile='{FONT_BOLD}':textfile='{tf_stage}':fontcolor={accent}:fontsize=21:x=66:y=604,"
-            f"drawtext=fontfile='{FONT_BOLD}':textfile='{tf_title}':fontcolor=white:fontsize=31:x=66:y=634,"
-            f"drawtext=fontfile='{FONT_REG}':textfile='{tf_sub}':fontcolor=#ffd166:fontsize=21:x=66:y=676"
-        )
-
-        cmd_sub = [
-            "ffmpeg", "-y",
-            "-stream_loop", "3",
-            "-t", f"{slot_dur:.2f}",
-            "-i", clip_path,
-            "-t", f"{slot_dur:.2f}",
-            "-vf", vf_filter,
-            *VIDEO_ENC_FLAGS,
-            "-an",
-            sub_out
-        ]
-        try:
-            res = subprocess.run(cmd_sub, capture_output=True, text=True, timeout=60)
-            if res.returncode == 0 and os.path.exists(sub_out) and os.path.getsize(sub_out) > 10000:
-                sub_videos.append(sub_out)
-            else:
-                print(f"⚠️ Sub-clip {idx} stderr: {res.stderr[-250:] if res.stderr else 'unknown'}")
-        except Exception as e:
-            print(f"⚠️ Sub-clip {idx} notice: {e}")
-
-    if not sub_videos:
-        fallback_v = os.path.join(WORK_DIR, f"{scene_id}_fallback.mp4")
-        vf_fb = (
-            f"drawbox=x=0:y=585:w=1280:h=135:color=#070d17@0.88:t=fill,"
-            f"drawbox=x=0:y=585:w=1280:h=5:color={accent}@1.0:t=fill,"
-            f"drawtext=fontfile='{FONT_BOLD}':textfile='{tf_stage}':fontcolor={accent}:fontsize=21:x=66:y=604,"
-            f"drawtext=fontfile='{FONT_BOLD}':textfile='{tf_title}':fontcolor=white:fontsize=31:x=66:y=634,"
-            f"drawtext=fontfile='{FONT_REG}':textfile='{tf_sub}':fontcolor=#ffd166:fontsize=21:x=66:y=676"
-        )
-        cmd_fb = [
-            "ffmpeg", "-y", "-f", "lavfi",
-            "-i", f"color=c=#101d30:s=1280x720:r=24:d={dur:.2f}",
-            "-vf", vf_fb,
-            *VIDEO_ENC_FLAGS,
-            "-an", fallback_v
-        ]
-        subprocess.run(cmd_fb, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30)
-        sub_videos.append(fallback_v)
-
-    concat_list_file = os.path.join(WORK_DIR, f"{scene_id}_subs.txt")
-    with open(concat_list_file, "w", encoding="utf-8") as f:
-        for sv in sub_videos:
-            f.write(f"file '{os.path.abspath(sv)}'\n")
-
-    cmd_mux = [
+    cmd_final_scene = [
         "ffmpeg", "-y",
-        "-f", "concat", "-safe", "0", "-i", concat_list_file,
+        "-i", bg_joined,
         "-i", audio_path,
+        "-vf", overlay_vf,
         "-map", "0:v:0", "-map", "1:a:0",
-        "-c:v", "copy",
+        "-c:v", "libx264", "-preset", "ultrafast", "-crf", "25", "-pix_fmt", "yuv420p", "-r", "24",
         "-c:a", "aac", "-ar", "44100", "-ac", "2", "-b:a", "128k",
         "-t", f"{dur:.2f}",
         out_path
     ]
-    subprocess.run(cmd_mux, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30)
-
-    for sv in sub_videos:
-        if os.path.exists(sv):
-            os.remove(sv)
-    for raw_c in video_clips:
-        if os.path.exists(raw_c):
-            os.remove(raw_c)
-
+    subprocess.run(cmd_final_scene, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     return dur
 
 
-def assemble_episode(segment_files, output_file):
-    print(f"🎞️ Assembling final episode: {output_file}...")
-    concat_file = os.path.join(WORK_DIR, "master_concat.txt")
-    with open(concat_file, "w", encoding="utf-8") as f:
-        for seg in segment_files:
-            f.write(f"file '{os.path.abspath(seg)}'\n")
-
-    cmd_fast = [
-        "ffmpeg", "-y",
-        "-f", "concat", "-safe", "0",
-        "-i", concat_file,
-        "-c:v", "copy",
-        "-c:a", "aac", "-ar", "44100", "-ac", "2", "-b:a", "128k",
-        "-movflags", "+faststart",
-        output_file
-    ]
-    res = subprocess.run(cmd_fast, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=120)
-
-    if res.returncode != 0 or not os.path.exists(output_file) or os.path.getsize(output_file) < 100000:
-        print("⚡ Running fast unified stream encode...")
-        cmd_fallback = [
-            "ffmpeg", "-y",
-            "-f", "concat", "-safe", "0",
-            "-i", concat_file,
-            "-c:v", "libx264", "-preset", "ultrafast",
-            "-crf", "27", "-maxrate", "950k", "-bufsize", "1900k",
-            "-pix_fmt", "yuv420p", "-r", "24",
-            "-c:a", "aac", "-ar", "44100", "-ac", "2", "-b:a", "128k",
-            "-movflags", "+faststart",
-            output_file
-        ]
-        subprocess.run(cmd_fallback, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=600)
-
-    size_mb = os.path.getsize(output_file) / (1024 * 1024)
-    print(f"✅ Finished {output_file}! Size: {size_mb:.1f} MB (Mobile Friendly)")
-
-
+# ==============================================================================
+# 8. MAIN PIPELINE ORCHESTRATOR
+# ==============================================================================
 def format_timestamp(seconds):
     m = int(seconds // 60)
     s = int(seconds % 60)
     return f"{m:02d}:{s:02d}"
 
 
-# ==============================================================================
-# 9. MAIN PIPELINE ORCHESTRATOR
-# ==============================================================================
 def main():
-    start_time = time.time()
-    candidates = fetch_candidate_medical_news(candidate_limit=28)
-    script_data = generate_script_with_gemini(candidates)
+    news_items = fetch_latest_medical_news(count=5)
+    script_data = generate_script_with_gemini(news_items)
 
     used_video_ids = load_set(USED_VIDEOS_FILE)
     initial_video_ids = set(used_video_ids)
 
-    stories = script_data["stories"]
-    selected_articles = []
-    for idx, st in enumerate(stories):
-        cand_idx = int(st.get("candidate_index", idx + 1)) - 1
-        if 0 <= cand_idx < len(candidates):
-            selected_articles.append(candidates[cand_idx])
-        else:
-            selected_articles.append(candidates[idx % len(candidates)])
-
     scenes = []
+
     intro = script_data["intro"]
     scenes.append({
         "id": "intro",
         "type": "intro",
-        "narration_en": intro["narration_en"],
-        "stage_en": "TODAY'S TOP 5 MEDICAL BREAKTHROUGHS",
-        "headline_en": intro.get("headline_en", "5 BREAKTHROUGHS CHANGING HUMAN HEALTH"),
-        "sub_en": intro.get("subheadline_en", "Verified Clinical & Research Report"),
+        "narration": intro.get("narration") or intro.get("narration_en"),
+        "stage_label": "TODAY'S TOP 5 MEDICAL BREAKTHROUGHS",
+        "headline": intro.get("headline", "5 BREAKTHROUGHS CHANGING HUMAN HEALTH"),
+        "subheadline": intro.get("subheadline", "Verified Clinical & Research Report"),
         "queries": intro.get("search_queries", ["medical research laboratory", "doctor hospital"]),
         "accent": "#00f5d4"
     })
 
-    act_configs = [
+    act_labels = [
         ("act_1", "STAGE 1: THE NEW DISCOVERY", "#00f5d4"),
         ("act_2", "STAGE 2: INSIDE YOUR BODY", "#00bbf9"),
         ("act_3", "STAGE 3: CLINICAL STUDY PROOF", "#ffd166"),
         ("act_4", "STAGE 4: WHAT IT MEANS FOR YOU", "#06d6a0"),
     ]
 
-    for idx, st in enumerate(stories):
+    for idx, st in enumerate(script_data["stories"]):
         s_num = idx + 1
-        art = selected_articles[idx]
-        citation_en = st.get("source_citation_en") or f"{art['source']} • {art['pub_date']}"
-        chapter_en = st.get("chapter_title_en") or art["title"][:52]
+        src_info = news_items[idx] if idx < len(news_items) else news_items[0]
+        citation = st.get("source_citation") or f"{src_info['source']} • {src_info['pub_date']}"
+        chapter_title = st.get("chapter_title") or src_info["title"][:50]
 
-        for act_key, act_label, accent_color in act_configs:
+        for act_key, act_stage_name, accent_color in act_labels:
             act_data = st[act_key]
             scenes.append({
                 "id": f"story_{s_num}_{act_key}",
                 "type": "story_act",
                 "story_num": s_num,
                 "is_first_act": (act_key == "act_1"),
-                "chapter_en": chapter_en,
-                "citation_en": citation_en,
-                "narration_en": act_data["narration_en"],
-                "stage_en": f"STORY #{s_num}  |  {act_label}",
-                "headline_en": act_data.get("headline_en", chapter_en),
-                "sub_en": f"Source: {citation_en} — {art['title'][:45]}...",
+                "chapter_title": chapter_title,
+                "source_citation": citation,
+                "narration": act_data.get("narration") or act_data.get("narration_en"),
+                "stage_label": f"STORY #{s_num}  |  {act_stage_name}",
+                "headline": act_data.get("headline", chapter_title),
+                "subheadline": f"Source: {citation} — {src_info['title'][:45]}...",
                 "queries": act_data.get("search_queries", ["medical research", "hospital doctor"]),
                 "accent": accent_color
             })
@@ -780,69 +586,77 @@ def main():
     scenes.append({
         "id": "outro",
         "type": "outro",
-        "narration_en": outro["narration_en"],
-        "stage_en": "DAILY MEDICAL INTELLIGENCE SUMMARY",
-        "headline_en": outro.get("headline_en", "THE FUTURE OF MEDICINE IS HERE"),
-        "sub_en": outro.get("subheadline_en", "Subscribe & Share Your Thoughts Below"),
+        "narration": outro.get("narration") or outro.get("narration_en"),
+        "stage_label": "DAILY MEDICAL INTELLIGENCE SUMMARY",
+        "headline": outro.get("headline", "THE FUTURE OF MEDICINE IS HERE"),
+        "subheadline": outro.get("subheadline", "Subscribe & Share Your Thoughts Below"),
         "queries": outro.get("search_queries", ["futuristic hospital", "healthy lifestyle"]),
         "accent": "#00f5d4"
     })
 
-    segments_en = []
+    final_segments = []
     chapter_timestamps = [("00:00", "Cold Open: 5 Medical Breakthroughs")]
-    current_time_en = 0.0
-    first_downloaded_clip = None
+    current_time = 0.0
 
-    print(f"🎬 Starting single-pass production for {len(scenes)} scenes...")
+    print(f"🎬 Starting video production for {len(scenes)} scenes...")
 
     for i, sc in enumerate(scenes, 1):
         sid = sc["id"]
-        print(f"  👉 [{i}/{len(scenes)}] Processing: {sid}")
+        print(f"  👉 [{i}/{len(scenes)}] Rendering scene: {sid}...")
 
         if sc.get("is_first_act"):
             s_num = sc["story_num"]
             chapter_timestamps.append(
-                (format_timestamp(current_time_en), f"Breakthrough #{s_num}: {sc['chapter_en']}")
+                (format_timestamp(current_time), f"Breakthrough #{s_num}: {sc['chapter_title']}")
             )
-            bumper_en = os.path.join(WORK_DIR, f"bumper_en_{s_num}.mp4")
-            create_chapter_bumper(s_num, sc["chapter_en"], sc["citation_en"], bumper_en)
-            segments_en.append(bumper_en)
-            current_time_en += 2.4
+            bumper_path = os.path.join(WORK_DIR, f"bumper_{s_num}.mp4")
+            create_chapter_bumper(s_num, sc["chapter_title"], sc["source_citation"], bumper_path)
+            final_segments.append(bumper_path)
+            current_time += 2.4
 
-        audio_en = os.path.join(WORK_DIR, f"{sid}_en.mp3")
-        generate_voiceover(sc["narration_en"], audio_en)
+        audio_path = os.path.join(WORK_DIR, f"{sid}.mp3")
+        generate_voiceover(sc["narration"], audio_path)
 
         clips = get_pexels_videos_for_scene(
             sc["queries"], count_needed=3, used_video_ids=used_video_ids, scene_prefix=sid
         )
 
-        if first_downloaded_clip is None and clips:
-            first_downloaded_clip = os.path.join(WORK_DIR, "thumb_sample.mp4")
-            shutil.copyfile(clips[0], first_downloaded_clip)
-
-        scene_en_mp4 = os.path.join(WORK_DIR, f"{sid}_en.mp4")
-        dur_en = render_scene_ffmpeg(
-            scene_id=f"{sid}_en",
-            audio_path=audio_en,
+        scene_mp4 = os.path.join(WORK_DIR, f"{sid}_final.mp4")
+        sc_dur = render_scene_ffmpeg(
+            scene_id=sid,
+            audio_path=audio_path,
             video_clips=clips,
-            stage_label=sc["stage_en"],
-            headline=sc["headline_en"],
-            subheadline=sc["sub_en"],
-            out_path=scene_en_mp4,
+            stage_label=sc["stage_label"],
+            headline=sc["headline"],
+            subheadline=sc["subheadline"],
+            out_path=scene_mp4,
             accent=sc["accent"]
         )
-        segments_en.append(scene_en_mp4)
-        current_time_en += dur_en
+        final_segments.append(scene_mp4)
+        current_time += sc_dur
 
-    generate_youtube_thumbnail(
-        thumb_query=script_data.get("thumbnail_search_query", "glowing brain doctor"),
-        line1=script_data.get("thumbnail_line1", "MEDICAL SHOCK"),
-        line2=script_data.get("thumbnail_line2", "NEW DISCOVERY!"),
-        sample_video_path=first_downloaded_clip,
-        out_jpg="thumbnail.jpg"
-    )
+    print("🎞️ Concatenating & compressing final HD episode for fast mobile download...")
+    master_list = os.path.join(WORK_DIR, "master_concat.txt")
+    with open(master_list, "w", encoding="utf-8") as f:
+        for seg in final_segments:
+            f.write(f"file '{os.path.abspath(seg)}'\n")
 
-    assemble_episode(segments_en, "final_video.mp4")
+    output_video = "final_video.mp4"
+    cmd_concat = [
+        "ffmpeg", "-y",
+        "-f", "concat", "-safe", "0",
+        "-i", master_list,
+        "-c:v", "libx264", "-preset", "ultrafast",
+        "-crf", "27", "-maxrate", "950k", "-bufsize", "1900k",
+        "-pix_fmt", "yuv420p", "-r", "24",
+        "-c:a", "aac", "-ar", "44100", "-ac", "2", "-b:a", "128k",
+        "-movflags", "+faststart",
+        output_video
+    ]
+    subprocess.run(cmd_concat, check=True)
+
+    size_mb = os.path.getsize(output_video) / (1024 * 1024)
+    print(f"✅ Final video ready: {output_video} ({size_mb:.1f} MB - Total Duration: {format_timestamp(current_time)})")
 
     yt_title = script_data.get("youtube_title", "5 Shocking Medical Breakthroughs Discovered Today")
     yt_intro = script_data.get("youtube_description_intro", "")
@@ -850,8 +664,8 @@ def main():
 
     chapters_block = "\n".join([f"{ts} - {label}" for ts, label in chapter_timestamps])
     sources_block = "\n".join([
-        f"• Breakthrough #{idx+1} ({art['source']} - {art['pub_date']}): {art['title']}\n  Link: {art['link']}"
-        for idx, art in enumerate(selected_articles)
+        f"• Story #{idx+1} ({item['source']} - {item['pub_date']}): {item['title']}\n  Link: {item['link']}"
+        for idx, item in enumerate(news_items)
     ])
 
     details_content = f"""====================================================================
@@ -864,7 +678,7 @@ def main():
 ====================================================================
 {yt_intro}
 
-In today's episode, we explore the 5 most fascinating medical, health, and longevity breakthroughs published by leading research institutions over the past 24 hours.
+In today's episode, we explore 5 brand-new medical, health, and clinical research breakthroughs published over the past 24 hours.
 
 ⏱️ VIDEO CHAPTERS (TIMESTAMPS):
 {chapters_block}
@@ -883,12 +697,10 @@ The content in this video is strictly for educational and informational purposes
     with open("youtube_details.txt", "w", encoding="utf-8") as f:
         f.write(details_content)
 
-    append_to_file(USED_NEWS_FILE, [a["title"] for a in selected_articles])
+    append_to_file(USED_NEWS_FILE, [item["title"] for item in news_items])
     new_vid_ids = used_video_ids - initial_video_ids
     append_to_file(USED_VIDEOS_FILE, list(new_vid_ids))
-
-    elapsed = (time.time() - start_time) / 60.0
-    print(f"🎉 ALL DONE in {elapsed:.1f} minutes! Video + Thumbnail + Metadata ready.")
+    print("💾 Memory updated (used_news.txt & used_videos.txt). All done!")
 
 
 if __name__ == "__main__":
