@@ -39,6 +39,29 @@ RSS_FEEDS = [
     ("ScienceDaily Longevity", "https://www.sciencedaily.com/rss/living_well.xml"),
 ]
 
+# 1. YouTube Ad-Safe & Non-Medical Filter (Blocks sensitive, political, or admin topics)
+BANNED_KEYWORDS = [
+    "sexual", "violence", "rape", "assault", "abuse", "suicide", "suicidal",
+    "self-harm", "homicide", "murder", "shooting", "firearm", "gun", "abortion",
+    "transgender", "lgbt", "racism", "racial", "police", "prison", "inmate",
+    "warfare", "terrorist", "parenting app", "hospital staffing", "billing",
+    "health insurance", "medicaid", "medicare policy", "climate change",
+    "global warming", "crop yield", "veterinary", "domestic violence"
+]
+
+# 2. High-Value Trending Medical Topics (Human Body, Diseases, Longevity & Drugs)
+MEDICAL_PRIORITY_KEYWORDS = [
+    "brain", "heart", "cancer", "tumor", "alzheimer", "dementia", "parkinson",
+    "diabetes", "insulin", "blood", "artery", "cholesterol", "stroke", "sleep",
+    "insomnia", "longevity", "aging", "ageing", "cell", "dna", "gene", "immune",
+    "vaccine", "drug", "pill", "medication", "therapy", "treatment", "cure",
+    "gut", "microbiome", "liver", "kidney", "lung", "vision", "eye", "hearing",
+    "pain", "arthritis", "inflammation", "metabolism", "obesity", "weight",
+    "fat", "vitamin", "supplement", "protein", "neuron", "memory", "nerve",
+    "infection", "virus", "bacteria", "antibiotic", "stem cell", "organ",
+    "clinical trial", "hypertension", "blood pressure", "cardiovascular"
+]
+
 FONT_BOLD = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
 FONT_REG = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
 
@@ -66,13 +89,30 @@ def clean_html(raw_html):
 
 
 # ==============================================================================
-# 3. FETCH 5 FRESH, REAL-TIME MEDICAL BREAKTHROUGHS
+# 3. SMART MEDICAL CURATION (AD-SAFE + HUMAN BODY FOCUS + DIVERSE SOURCES)
 # ==============================================================================
+def is_ad_safe_and_medical(title, summary):
+    combined = f"{title} {summary}".lower()
+    for bad_word in BANNED_KEYWORDS:
+        if bad_word in combined:
+            return False, 0
+
+    score = 0
+    for med_word in MEDICAL_PRIORITY_KEYWORDS:
+        if med_word in title.lower():
+            score += 3
+        elif med_word in combined:
+            score += 1
+
+    return True, score
+
+
 def fetch_latest_medical_news(count=5):
-    print("📡 Fetching global medical & research feeds (Real-Time)...")
+    print("📡 Fetching & filtering global medical feeds (Human Body, Diseases & Drugs)...")
     used_titles = load_set(USED_NEWS_FILE)
     candidates = []
     seen_now = set()
+    now_ts = time.time()
 
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
@@ -84,7 +124,7 @@ def fetch_latest_medical_news(count=5):
             if resp.status_code != 200:
                 continue
             feed = feedparser.parse(resp.content)
-            for entry in feed.entries[:12]:
+            for entry in feed.entries[:18]:
                 title = entry.get("title", "").strip()
                 link = entry.get("link", "").strip()
                 summary = clean_html(entry.get("summary", entry.get("description", "")))
@@ -92,9 +132,16 @@ def fetch_latest_medical_news(count=5):
                 if not title or title in used_titles or title in seen_now:
                     continue
 
+                is_safe, med_score = is_ad_safe_and_medical(title, summary)
+                if not is_safe or med_score < 2:
+                    continue
+
                 pub_struct = entry.get("published_parsed") or entry.get("updated_parsed")
-                timestamp = calendar.timegm(pub_struct) if pub_struct else time.time()
-                pub_date_str = time.strftime("%B %d, %Y", time.gmtime(timestamp))
+                raw_ts = calendar.timegm(pub_struct) if pub_struct else now_ts
+                # Prevent malformed future RSS dates from dominating the sort
+                if raw_ts > now_ts + 3600:
+                    raw_ts = now_ts
+                pub_date_str = time.strftime("%B %d, %Y", time.gmtime(raw_ts))
 
                 seen_now.add(title)
                 candidates.append({
@@ -103,25 +150,45 @@ def fetch_latest_medical_news(count=5):
                     "link": link,
                     "summary": summary[:700],
                     "pub_date": pub_date_str,
-                    "timestamp": timestamp
+                    "timestamp": raw_ts,
+                    "med_score": med_score
                 })
         except Exception as e:
             print(f"⚠️ Warning fetching {source_name}: {e}")
 
-    candidates.sort(key=lambda x: x["timestamp"], reverse=True)
-    selected = candidates[:count]
+    # Sort by medical relevance score first, then freshness
+    candidates.sort(key=lambda x: (x["med_score"], x["timestamp"]), reverse=True)
+
+    # Enforce source diversity: max 2 stories per source in a 5-story episode
+    selected = []
+    source_counts = {}
+    for item in candidates:
+        src = item["source"]
+        if source_counts.get(src, 0) < 2:
+            selected.append(item)
+            source_counts[src] = source_counts.get(src, 0) + 1
+            if len(selected) == count:
+                break
+
+    # Fallback if fewer than 5 after strict diversity cap
+    if len(selected) < count:
+        for item in candidates:
+            if item not in selected:
+                selected.append(item)
+                if len(selected) == count:
+                    break
 
     if len(selected) < count:
-        raise RuntimeError(f"❌ Not enough new articles found (found {len(selected)}).")
+        raise RuntimeError(f"❌ Not enough new medical articles found (found {len(selected)}).")
 
-    print(f"✅ Selected {len(selected)} fresh medical breakthroughs:")
+    print(f"✅ Selected {len(selected)} high-impact, ad-safe medical breakthroughs from diverse sources:")
     for idx, item in enumerate(selected, 1):
-        print(f"  {idx}. [{item['source']} - {item['pub_date']}] {item['title']}")
+        print(f"  {idx}. [{item['source']} | Score:{item['med_score']}] {item['title']}")
     return selected
 
 
 # ==============================================================================
-# 4. GEMINI AI: DOCUMENTARY SCRIPT GENERATION
+# 4. GEMINI AI: VIRAL TITLE + DOCUMENTARY SCRIPT GENERATION
 # ==============================================================================
 def get_working_gemini_model():
     preferred = [
@@ -163,7 +230,7 @@ def extract_json_safely(raw_text):
 
 
 def generate_script_with_gemini(news_items):
-    print("🧠 Generating high-retention documentary script with Gemini AI...")
+    print("🧠 Generating viral titles & high-retention documentary script with Gemini AI...")
     model = get_working_gemini_model()
 
     news_block = ""
@@ -175,24 +242,30 @@ def generate_script_with_gemini(news_items):
         )
 
     prompt = f"""
-You are the Lead Producer and Host of a top-tier English Medical & Science YouTube Channel.
+You are the Executive Producer and Lead Storyteller of a 5-Million-Subscriber English Medical, Health & Longevity YouTube Channel.
 Your task is to write a gripping, conversational, high-retention 13 to 15 minute episode (~2,000 to 2,200 spoken words total) covering these 5 real-time medical breakthroughs:
 {news_block}
 
-CRITICAL STORYTELLING RULES:
-1. Speak directly to the viewer ("you", "your body") with warmth, excitement, and scientific clarity.
-2. Start the Intro with a unique, surprising Cold-Open Hook question or mystery before welcoming the viewer.
-3. DO NOT read website names (like MedicalXpress, News-Medical, ScienceDaily) or publication dates out loud in the narration. Keep the spoken narration 100% immersive, natural storytelling (sources will be listed in the written video description box).
-4. Divide EACH of the 5 stories into 4 distinct acts (Act 1: The Discovery, Act 2: How It Works Inside Your Body using a simple everyday analogy, Act 3: The Clinical Proof & Numbers, Act 4: What It Means For Your Future + a 1-sentence cliffhanger for the next story).
-5. For every single act, provide 3 specific visual search queries (2-4 English words each) suitable for finding moving stock footage on Pexels (e.g., "microscope cells dividing", "doctor checking mri", "dna helix glowing").
+CRITICAL YOUTUBE TITLE & STORYTELLING RULES:
+1. VIRAL YOUTUBE TITLE SELECTION: Analyze all 5 stories and pick the #1 MOST FASCINATING human-body, disease, organ, longevity, or drug discovery that makes an everyday viewer think: "Wait—this affects MY body and health!" Build `youtube_title` around that #1 hook (e.g., "Scientists Found the Hidden Trigger Behind... (5 Medical Breakthroughs)"). Also provide 2 extra viral title options in `alternative_titles`.
+2. 100% YOUTUBE AD-SAFE: Never use sensitive or demonetized words (like violence, sexual, suicide, abuse). Keep all titles, chapters, and narration 100% advertiser-friendly clinical science.
+3. CONVERSATIONAL STORYTELLING: Speak directly to the viewer ("you", "your cells", "your brain") with warmth, excitement, and clarity.
+4. COLD-OPEN HOOK: Start the Intro with a unique, surprising Cold-Open question or mystery about the #1 breakthrough before welcoming the viewer.
+5. NO WEBSITE NAMES IN SPOKEN AUDIO: DO NOT read website names (like MedicalXpress, News-Medical, ScienceDaily) or publication dates out loud in the narration. Keep the spoken narration 100% immersive storytelling (sources are placed in the written description box).
+6. 4 ACTS PER STORY: Divide EACH of the 5 stories into 4 distinct acts (Act 1: The Discovery, Act 2: How It Works Inside Your Body using a simple everyday analogy, Act 3: The Clinical Proof & Numbers, Act 4: What It Means For Your Future + a 1-sentence cliffhanger for the next story).
+7. For every single act, provide 3 specific visual search queries (2-4 English words each) suitable for finding moving medical stock footage on Pexels (e.g., "microscope cells dividing", "doctor checking mri", "dna helix glowing").
 
 Return STRICTLY valid JSON (no markdown code blocks) with this exact structure:
 {{
-  "youtube_title": "Viral, curiosity-driven YouTube title (under 90 chars)",
+  "youtube_title": "Best High-CTR Viral YouTube Title focusing on the #1 human health breakthrough (under 85 chars)",
+  "alternative_titles": [
+    "Alternative Viral Title Option 2 (Curiosity-driven, under 85 chars)",
+    "Alternative Viral Title Option 3 (Direct health benefit/warning, under 85 chars)"
+  ],
   "youtube_description_intro": "Engaging 3-sentence summary for YouTube description.",
-  "youtube_tags": ["medical news", "health breakthroughs", "science news", "longevity", "medical research"],
+  "youtube_tags": ["medical breakthroughs", "health news", "longevity", "medical research", "new treatments", "human body", "science news"],
   "intro": {{
-    "narration": "140-160 words. Start with a shocking Cold-Open hook, then welcome viewers and preview today's 5 breakthroughs.",
+    "narration": "140-160 words. Start with a shocking Cold-Open hook about the #1 discovery, then welcome viewers and preview today's 5 breakthroughs.",
     "headline": "5 BREAKTHROUGHS CHANGING HUMAN HEALTH",
     "subheadline": "Verified Clinical & Research Report",
     "search_queries": ["hospital doctor walking", "medical laboratory scientist", "dna double helix"]
@@ -200,9 +273,9 @@ Return STRICTLY valid JSON (no markdown code blocks) with this exact structure:
   "stories": [
     {{
       "story_number": 1,
-      "chapter_title": "Short compelling title for Story 1 (max 52 chars)",
+      "chapter_title": "Short compelling ad-safe title for Story 1 (max 50 chars)",
       "act_1": {{
-        "narration": "90-105 words. Hook the viewer with a relatable human problem, then reveal the new discovery.",
+        "narration": "90-105 words. Hook the viewer with a relatable human health problem, then reveal the new discovery.",
         "headline": "SHORT UPPERCASE HEADLINE (MAX 48 CHARS)",
         "search_queries": ["visual query 1", "visual query 2", "visual query 3"]
       }},
@@ -243,7 +316,7 @@ Ensure the `stories` list contains all 5 stories (story_number 1 to 5).
             )
             data = extract_json_safely(response.text)
             if "stories" in data and len(data["stories"]) == 5:
-                print("✅ Documentary script generated and validated!")
+                print("✅ Documentary script & viral titles generated and validated!")
                 return data
             else:
                 raise ValueError("JSON did not contain 5 stories.")
@@ -492,7 +565,7 @@ def render_scene_ffmpeg(
     write_text_file(tf_stage, str(stage_label).upper()[:58])
     write_text_file(tf_title, str(headline).upper()[:58])
 
-    # Sleek, compact 2-line lower-third banner (76px height instead of 135px)
+    # Sleek, compact 2-line lower-third banner (76px height)
     overlay_vf = (
         f"drawbox=x=0:y=644:w=1280:h=76:color=#070d17@0.84:t=fill,"
         f"drawbox=x=0:y=644:w=1280:h=3:color={accent}@1.0:t=fill,"
@@ -647,19 +720,27 @@ def main():
     print(f"✅ Final video ready: {output_video} ({size_mb:.1f} MB - Total Duration: {format_timestamp(current_time)})")
 
     yt_title = script_data.get("youtube_title", "5 Shocking Medical Breakthroughs Discovered Today")
+    alt_titles = script_data.get("alternative_titles", [])
+    alt_titles_block = ""
+    if isinstance(alt_titles, list) and alt_titles:
+        alt_titles_block = "\n💡 ALTERNATIVE VIRAL TITLES (OPTIONAL):\n" + "\n".join(
+            [f"• Option {idx+2}: {t}" for idx, t in enumerate(alt_titles)]
+        )
+
     yt_intro = script_data.get("youtube_description_intro", "")
     yt_tags = ", ".join(script_data.get("youtube_tags", ["medical news", "health breakthroughs"]))
 
     chapters_block = "\n".join([f"{ts} - {label}" for ts, label in chapter_timestamps])
     sources_block = "\n".join([
         f"• Breakthrough #{idx+1} ({item['source']} - {item['pub_date']}): {item['title']}\n  Study Link: {item['link']}"
-        for idx, item in enumerate(news_items)
+        for idx, art_idx in enumerate(range(len(news_items)))
+        for item in [news_items[art_idx]]
     ])
 
     details_content = f"""====================================================================
-🎬 YOUTUBE VIDEO TITLE (COPY & PASTE):
+🎬 YOUTUBE VIDEO TITLE (PICK ONE & COPY):
 ====================================================================
-{yt_title}
+• Option 1 (Recommended): {yt_title}{alt_titles_block}
 
 ====================================================================
 📝 YOUTUBE DESCRIPTION (WITH CHAPTERS & VERIFIED SOURCES):
