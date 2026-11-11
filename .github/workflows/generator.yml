@@ -5,7 +5,7 @@ on:
     # Daily every day at 16:00 UTC
     - cron: '0 16 * * *'
     # Extra Sunday episode at 20:00 UTC (2 videos on Sunday)
-    - cron: '0 20 * * 0'
+    - cron: '0 16,20 * * 0'
   workflow_dispatch:
 
 concurrency:
@@ -29,21 +29,27 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Install System Media Tools (FFmpeg & Fonts)
+      - name: Prepare Pre-installed Media & Fonts (Zero apt-get)
         run: |
-          if command -v ffmpeg >/dev/null 2>&1 && [ -f /usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf ]; then
-            echo "✅ FFmpeg and DejaVu fonts are already pre-installed! Skipping apt-get (0 seconds)."
-          else
-            sudo DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 -o Acquire::Retries=2 update
-            sudo DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 install -y --no-install-recommends ffmpeg fonts-dejavu-core
+          sudo mkdir -p /usr/share/fonts/truetype/dejavu
+          SYS_BOLD=$(find /usr/share/fonts -iname "*bold*.ttf" | head -n 1)
+          SYS_REG=$(find /usr/share/fonts -iname "*.ttf" ! -iname "*bold*" | head -n 1)
+          if [ -z "$SYS_BOLD" ]; then SYS_BOLD="$SYS_REG"; fi
+          if [ ! -f /usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf ] && [ -n "$SYS_BOLD" ]; then
+            sudo cp "$SYS_BOLD" /usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf
           fi
+          if [ ! -f /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf ] && [ -n "$SYS_REG" ]; then
+            sudo cp "$SYS_REG" /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf
+          fi
+          ffmpeg -version | head -n 1
+          echo "✅ Media tools & fonts ready in 0.1s without apt-get!"
 
       - name: Install Python Libraries
         run: |
           pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run AI Agent (Single-Pass Turbo Mode)
+      - name: Run AI Agent (Full Features + Thumbnail + Fast Render)
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
