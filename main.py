@@ -170,10 +170,8 @@ def generate_script_with_gemini(news_items):
     for i, item in enumerate(news_items, 1):
         news_block += (
             f"\nSTORY #{i}:\n"
-            f"- Source: {item['source']} ({item['pub_date']})\n"
             f"- Title: {item['title']}\n"
             f"- Summary: {item['summary']}\n"
-            f"- Link: {item['link']}\n"
         )
 
     prompt = f"""
@@ -184,7 +182,7 @@ Your task is to write a gripping, conversational, high-retention 13 to 15 minute
 CRITICAL STORYTELLING RULES:
 1. Speak directly to the viewer ("you", "your body") with warmth, excitement, and scientific clarity.
 2. Start the Intro with a unique, surprising Cold-Open Hook question or mystery before welcoming the viewer.
-3. Explicitly cite the scientific source and publication date in the narration for credibility.
+3. DO NOT read website names (like MedicalXpress, News-Medical, ScienceDaily) or publication dates out loud in the narration. Keep the spoken narration 100% immersive, natural storytelling (sources will be listed in the written video description box).
 4. Divide EACH of the 5 stories into 4 distinct acts (Act 1: The Discovery, Act 2: How It Works Inside Your Body using a simple everyday analogy, Act 3: The Clinical Proof & Numbers, Act 4: What It Means For Your Future + a 1-sentence cliffhanger for the next story).
 5. For every single act, provide 3 specific visual search queries (2-4 English words each) suitable for finding moving stock footage on Pexels (e.g., "microscope cells dividing", "doctor checking mri", "dna helix glowing").
 
@@ -203,9 +201,8 @@ Return STRICTLY valid JSON (no markdown code blocks) with this exact structure:
     {{
       "story_number": 1,
       "chapter_title": "Short compelling title for Story 1 (max 52 chars)",
-      "source_citation": "Source Name • Date",
       "act_1": {{
-        "narration": "90-105 words. Hook the viewer with a relatable human problem, then announce the breakthrough and cite the source.",
+        "narration": "90-105 words. Hook the viewer with a relatable human problem, then reveal the new discovery.",
         "headline": "SHORT UPPERCASE HEADLINE (MAX 48 CHARS)",
         "search_queries": ["visual query 1", "visual query 2", "visual query 3"]
       }},
@@ -227,7 +224,7 @@ Return STRICTLY valid JSON (no markdown code blocks) with this exact structure:
     }}
   ],
   "outro": {{
-    "narration": "95-115 words. Inspiring wrap-up, ask viewers which breakthrough amazed them most in the comments, remind to subscribe, and state a clear educational medical disclaimer.",
+    "narration": "95-115 words. Inspiring wrap-up, ask viewers which breakthrough amazed them most in the comments, remind to subscribe, and state that all scientific study links are in the description below along with an educational medical disclaimer.",
     "headline": "THE FUTURE OF MEDICINE IS HERE",
     "subheadline": "Subscribe for Daily Evidence-Based Breakthroughs",
     "search_queries": ["futuristic hospital technology", "doctor smiling", "healthy active lifestyle"]
@@ -377,7 +374,7 @@ def get_pexels_videos_for_scene(queries, count_needed, used_video_ids, scene_pre
 
 
 # ==============================================================================
-# 7. FFMPEG BROADCAST RENDERING (CHAPTER BUMPERS + LOWER-THIRDS)
+# 7. FFMPEG BROADCAST RENDERING (CHAPTER BUMPERS + SLIM LOWER-THIRDS)
 # ==============================================================================
 def write_text_file(filename, content):
     clean = re.sub(r"\s+", " ", str(content)).strip()
@@ -385,15 +382,15 @@ def write_text_file(filename, content):
         f.write(clean)
 
 
-def create_chapter_bumper(story_num, title_text, source_text, out_path):
+def create_chapter_bumper(story_num, title_text, out_path):
     dur = 2.4
     f_badge = os.path.join(WORK_DIR, f"b_badge_{story_num}.txt")
     f_title = os.path.join(WORK_DIR, f"b_title_{story_num}.txt")
-    f_src = os.path.join(WORK_DIR, f"b_src_{story_num}.txt")
+    f_sub = os.path.join(WORK_DIR, f"b_sub_{story_num}.txt")
 
     write_text_file(f_badge, f"BREAKTHROUGH #{story_num}")
     write_text_file(f_title, str(title_text).upper()[:52])
-    write_text_file(f_src, f"VERIFIED SOURCE: {str(source_text)[:65]}")
+    write_text_file(f_sub, "FULL STUDY & SOURCE LINK IN DESCRIPTION BELOW")
 
     vf = (
         f"drawbox=x=80:y=190:w=1120:h=340:color=#0f1b2d@0.95:t=fill,"
@@ -401,7 +398,7 @@ def create_chapter_bumper(story_num, title_text, source_text, out_path):
         f"drawbox=x=80:y=524:w=1120:h=6:color=#ffd166@1.0:t=fill,"
         f"drawtext=fontfile='{FONT_BOLD}':textfile='{f_badge}':fontcolor=#00f5d4:fontsize=30:x=130:y=240,"
         f"drawtext=fontfile='{FONT_BOLD}':textfile='{f_title}':fontcolor=white:fontsize=38:x=130:y=315,"
-        f"drawtext=fontfile='{FONT_REG}':textfile='{f_src}':fontcolor=#ffd166:fontsize=23:x=130:y=415,"
+        f"drawtext=fontfile='{FONT_REG}':textfile='{f_sub}':fontcolor=#ffd166:fontsize=21:x=130:y=415,"
         f"fade=t=in:st=0:d=0.35,fade=t=out:st=2.0:d=0.4"
     )
 
@@ -432,7 +429,6 @@ def render_scene_ffmpeg(
     video_clips,
     stage_label,
     headline,
-    subheadline,
     out_path,
     accent="#00f5d4"
 ):
@@ -492,19 +488,17 @@ def render_scene_ffmpeg(
 
     tf_stage = os.path.join(WORK_DIR, f"{scene_id}_stage.txt")
     tf_title = os.path.join(WORK_DIR, f"{scene_id}_title.txt")
-    tf_sub = os.path.join(WORK_DIR, f"{scene_id}_sub.txt")
 
-    write_text_file(tf_stage, str(stage_label).upper()[:55])
-    write_text_file(tf_title, str(headline).upper()[:54])
-    write_text_file(tf_sub, str(subheadline)[:72])
+    write_text_file(tf_stage, str(stage_label).upper()[:58])
+    write_text_file(tf_title, str(headline).upper()[:58])
 
+    # Sleek, compact 2-line lower-third banner (76px height instead of 135px)
     overlay_vf = (
-        f"drawbox=x=0:y=585:w=1280:h=135:color=#070d17@0.88:t=fill,"
-        f"drawbox=x=0:y=585:w=1280:h=5:color={accent}@1.0:t=fill,"
-        f"drawbox=x=38:y=602:w=10:h=96:color={accent}@1.0:t=fill,"
-        f"drawtext=fontfile='{FONT_BOLD}':textfile='{tf_stage}':fontcolor={accent}:fontsize=21:x=66:y=604,"
-        f"drawtext=fontfile='{FONT_BOLD}':textfile='{tf_title}':fontcolor=white:fontsize=31:x=66:y=634,"
-        f"drawtext=fontfile='{FONT_REG}':textfile='{tf_sub}':fontcolor=#ffd166:fontsize=21:x=66:y=676"
+        f"drawbox=x=0:y=644:w=1280:h=76:color=#070d17@0.84:t=fill,"
+        f"drawbox=x=0:y=644:w=1280:h=3:color={accent}@1.0:t=fill,"
+        f"drawbox=x=36:y=656:w=7:h=52:color={accent}@1.0:t=fill,"
+        f"drawtext=fontfile='{FONT_BOLD}':textfile='{tf_stage}':fontcolor={accent}:fontsize=17:x=56:y=656,"
+        f"drawtext=fontfile='{FONT_BOLD}':textfile='{tf_title}':fontcolor=white:fontsize=25:x=56:y=680"
     )
 
     cmd_final_scene = [
@@ -547,7 +541,6 @@ def main():
         "narration": intro.get("narration") or intro.get("narration_en"),
         "stage_label": "TODAY'S TOP 5 MEDICAL BREAKTHROUGHS",
         "headline": intro.get("headline", "5 BREAKTHROUGHS CHANGING HUMAN HEALTH"),
-        "subheadline": intro.get("subheadline", "Verified Clinical & Research Report"),
         "queries": intro.get("search_queries", ["medical research laboratory", "doctor hospital"]),
         "accent": "#00f5d4"
     })
@@ -562,7 +555,6 @@ def main():
     for idx, st in enumerate(script_data["stories"]):
         s_num = idx + 1
         src_info = news_items[idx] if idx < len(news_items) else news_items[0]
-        citation = st.get("source_citation") or f"{src_info['source']} • {src_info['pub_date']}"
         chapter_title = st.get("chapter_title") or src_info["title"][:50]
 
         for act_key, act_stage_name, accent_color in act_labels:
@@ -573,11 +565,9 @@ def main():
                 "story_num": s_num,
                 "is_first_act": (act_key == "act_1"),
                 "chapter_title": chapter_title,
-                "source_citation": citation,
                 "narration": act_data.get("narration") or act_data.get("narration_en"),
                 "stage_label": f"STORY #{s_num}  |  {act_stage_name}",
                 "headline": act_data.get("headline", chapter_title),
-                "subheadline": f"Source: {citation} — {src_info['title'][:45]}...",
                 "queries": act_data.get("search_queries", ["medical research", "hospital doctor"]),
                 "accent": accent_color
             })
@@ -589,7 +579,6 @@ def main():
         "narration": outro.get("narration") or outro.get("narration_en"),
         "stage_label": "DAILY MEDICAL INTELLIGENCE SUMMARY",
         "headline": outro.get("headline", "THE FUTURE OF MEDICINE IS HERE"),
-        "subheadline": outro.get("subheadline", "Subscribe & Share Your Thoughts Below"),
         "queries": outro.get("search_queries", ["futuristic hospital", "healthy lifestyle"]),
         "accent": "#00f5d4"
     })
@@ -610,7 +599,7 @@ def main():
                 (format_timestamp(current_time), f"Breakthrough #{s_num}: {sc['chapter_title']}")
             )
             bumper_path = os.path.join(WORK_DIR, f"bumper_{s_num}.mp4")
-            create_chapter_bumper(s_num, sc["chapter_title"], sc["source_citation"], bumper_path)
+            create_chapter_bumper(s_num, sc["chapter_title"], bumper_path)
             final_segments.append(bumper_path)
             current_time += 2.4
 
@@ -628,7 +617,6 @@ def main():
             video_clips=clips,
             stage_label=sc["stage_label"],
             headline=sc["headline"],
-            subheadline=sc["subheadline"],
             out_path=scene_mp4,
             accent=sc["accent"]
         )
@@ -664,7 +652,7 @@ def main():
 
     chapters_block = "\n".join([f"{ts} - {label}" for ts, label in chapter_timestamps])
     sources_block = "\n".join([
-        f"• Story #{idx+1} ({item['source']} - {item['pub_date']}): {item['title']}\n  Link: {item['link']}"
+        f"• Breakthrough #{idx+1} ({item['source']} - {item['pub_date']}): {item['title']}\n  Study Link: {item['link']}"
         for idx, item in enumerate(news_items)
     ])
 
@@ -683,7 +671,7 @@ In today's episode, we explore 5 brand-new medical, health, and clinical researc
 ⏱️ VIDEO CHAPTERS (TIMESTAMPS):
 {chapters_block}
 
-🔬 VERIFIED SCIENTIFIC SOURCES & STUDIES CITED:
+🔬 VERIFIED SCIENTIFIC SOURCES & STUDIES CITED IN THIS VIDEO:
 {sources_block}
 
 ⚠️ MEDICAL DISCLAIMER:
