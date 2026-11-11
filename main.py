@@ -16,12 +16,13 @@ import wave
 import struct
 import random
 import asyncio
+import calendar
 import urllib.parse
 import feedparser
 import requests
 import edge_tts
 import google.generativeai as genai
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageEnhance
 
 # ==================== 1. CONFIGURATION ====================
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
@@ -29,18 +30,22 @@ PEXELS_API_KEY = os.environ.get("PEXELS_API_KEY")
 VOICE_EN = "en-US-ChristopherNeural"  # Constant American Documentary Narrator
 
 USED_NEWS_FILE = "used_news.txt"
-USED_VIDEOS_FILE = "used_videos.txt"  # Permanent memory so video clips NEVER repeat across episodes!
+USED_VIDEOS_FILE = "used_videos.txt"
+
+BROWSER_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Accept": "application/rss+xml, application/xml, text/xml, */*"
+}
 
 RSS_FEEDS = [
-    ("ScienceDaily Health", "https://www.sciencedaily.com/rss/health_medicine.xml"),
     ("MedicalXpress", "https://medicalxpress.com/rss-feed/"),
-    ("ScienceDaily Mind & Brain", "https://www.sciencedaily.com/rss/mind_brain.xml"),
-    ("ScienceDaily Living Well", "https://www.sciencedaily.com/rss/living_well.xml"),
+    ("News-Medical", "https://www.news-medical.net/tag/feed/Medical-Research.aspx"),
     ("EurekAlert Medicine", "https://www.eurekalert.org/rss/medicine_health.xml"),
-    ("News-Medical", "https://www.news-medical.net/tag/feed/Medical-Research.aspx")
+    ("ScienceDaily Health", "https://www.sciencedaily.com/rss/health_medicine.xml"),
+    ("ScienceDaily Mind & Brain", "https://www.sciencedaily.com/rss/mind_brain.xml"),
+    ("ScienceDaily Living Well", "https://www.sciencedaily.com/rss/living_well.xml")
 ]
 
-# Massive diverse fallback pool to prevent visual repetition
 FALLBACK_VIDEO_QUERIES = [
     "red blood cells animation", "human brain neurons glowing", "scientist pipette test tube",
     "mri scanner hospital room", "heartbeat monitor screen", "dna strand rotation",
@@ -54,10 +59,16 @@ FALLBACK_VIDEO_QUERIES = [
     "healthy heart animation", "scientist typing computer lab", "hospital corridor modern"
 ]
 
-# Professional TV Broadcast xfade transitions
 XFADE_TRANSITIONS = [
     "smoothleft", "smoothright", "wipeleft", "wiperight",
     "slideleft", "slideright", "circleopen", "dissolve", "radial"
+]
+
+ACT_STAGE_LABELS = [
+    "STAGE 1: THE NEW DISCOVERY",
+    "STAGE 2: INSIDE YOUR BODY",
+    "STAGE 3: CLINICAL STUDY PROOF",
+    "STAGE 4: WHAT IT MEANS FOR YOU"
 ]
 
 os.makedirs("temp", exist_ok=True)
@@ -77,7 +88,7 @@ def append_to_file(filepath, items):
 
 used_pexels_ids = load_set_from_file(USED_VIDEOS_FILE)
 newly_used_pexels_ids = []
-print(f"Loaded {len(used_pexels_ids)} previously used video IDs from permanent memory (Zero Repetition Active).")
+print(f"Loaded {len(used_pexels_ids)} previously used video IDs from permanent memory.")
 
 # ==================== 3. SMART AI MODEL DETECTOR ====================
 genai.configure(api_key=GEMINI_API_KEY)
@@ -141,47 +152,48 @@ def clean_json_response(text):
         return json.loads(text[start:end+1])
     raise ValueError("Invalid JSON format from AI")
 
-# ==================== 4. VIRAL MEDICAL NEWS FILTER ====================
+# ==================== 4. LIVE REAL-TIME CHRONOLOGICAL NEWS RADAR ====================
 def fetch_viral_medical_news(count=5):
-    print("Scanning global feeds for candidate medical breakthroughs...")
+    print("Scanning live global medical feeds with real-time timestamp sorting...")
     used_titles = {t.lower() for t in load_set_from_file(USED_NEWS_FILE)}
     candidates = []
     seen_now = set()
+    now_ts = time.time()
 
     for source_name, url in RSS_FEEDS:
         try:
-            feed = feedparser.parse(url)
-            for entry in feed.entries[:12]:
+            resp = http_session.get(url, headers=BROWSER_HEADERS, timeout=15)
+            feed = feedparser.parse(resp.content) if resp.status_code == 200 else feedparser.parse(url)
+            for idx_entry, entry in enumerate(feed.entries[:12]):
                 title = entry.get("title", "").strip()
                 summary = re.sub(r"<[^>]+>", "", entry.get("summary", "")).strip()
                 link = entry.get("link", "").strip()
                 t_lower = title.lower()
+
+                # Extract accurate publication timestamp
+                parsed_time = entry.get("published_parsed") or entry.get("updated_parsed")
+                if parsed_time:
+                    pub_ts = calendar.timegm(parsed_time)
+                    # Reject future/malformed timestamps
+                    if pub_ts > now_ts + 86400:
+                        pub_ts = now_ts - (idx_entry * 600)
+                else:
+                    pub_ts = now_ts - (idx_entry * 600)
+
                 if title and len(summary) > 60 and t_lower not in used_titles and t_lower not in seen_now:
                     seen_now.add(t_lower)
                     candidates.append({
                         "title": title,
                         "summary": summary[:900],
                         "source": source_name,
-                        "link": link
+                        "link": link,
+                        "pub_ts": pub_ts
                     })
         except Exception as e:
             print(f"RSS error ({url}): {e}")
 
-    if len(candidates) < count:
-        for source_name, url in RSS_FEEDS:
-            feed = feedparser.parse(url)
-            for entry in feed.entries[:10]:
-                title = entry.get("title", "").strip()
-                summary = re.sub(r"<[^>]+>", "", entry.get("summary", "")).strip()
-                link = entry.get("link", "").strip()
-                if title and title.lower() not in seen_now:
-                    seen_now.add(title.lower())
-                    candidates.append({
-                        "title": title,
-                        "summary": summary[:900],
-                        "source": source_name,
-                        "link": link
-                    })
+    # Sort strictly by newest timestamp first
+    candidates.sort(key=lambda x: x["pub_ts"], reverse=True)
 
     pool = candidates[:28]
     if len(pool) <= count:
@@ -189,17 +201,17 @@ def fetch_viral_medical_news(count=5):
         append_to_file(USED_NEWS_FILE, [a["title"] for a in selected])
         return selected
 
-    numbered_list = "\n".join([f"{i}: {a['title']} — {a['summary'][:180]}" for i, a in enumerate(pool)])
+    numbered_list = "\n".join([f"{i}: {a['title']} ({a['source']}) — {a['summary'][:170]}" for i, a in enumerate(pool)])
     selector_prompt = f"""
     You are a viral YouTube Medical Documentary Producer.
-    Below are {len(pool)} newly published medical & health news articles:
+    Below are {len(pool)} newly published medical & health news articles sorted by newest release:
     {numbered_list}
 
     Select the 5 MOST FASCINATING, SHOCKING, AND HUMAN-RELEVANT stories for US and European viewers (prioritize: sleep, brain/memory, heart health, longevity/aging, common medications, everyday foods/drinks, cancer breakthroughs, gut health, or surprising body secrets).
     Order them from #1 (Most Mind-Blowing Hook Story) to #5.
     Return ONLY valid JSON:
     {{
-      "selected_indices": [0, 4, 7, 12, 19]
+      "selected_indices": [0, 2, 5, 9, 14]
     }}
     """
     try:
@@ -221,9 +233,9 @@ def fetch_viral_medical_news(count=5):
     append_to_file(USED_NEWS_FILE, [a["title"] for a in selected])
     return selected
 
-# ==================== 5. STORYTELLING SCRIPT WITH DIVERSE VISUAL QUERIES ====================
+# ==================== 5. STORYTELLING SCRIPT + DYNAMIC ACT SUB-HEADLINES ====================
 def build_storytelling_script(articles):
-    print("Crafting High-Retention Storytelling Script with Unique Visual Scenes...")
+    print("Crafting High-Retention Script with Dynamic Act Sub-Headlines & Thumbnail Text...")
     segments = []
     titles_list = "\n".join([f"Story #{i+1}: {a['title']} (Source: {a['source']})" for i, a in enumerate(articles)])
 
@@ -236,11 +248,14 @@ def build_storytelling_script(articles):
     Write a high-retention 135-word "Cold-Open Hook & Intro":
     - Start Sentence #1 by addressing the viewer directly ("You") with a mind-blowing question, everyday habit, or shocking scenario from Story #1 that grabs attention in the first 5 seconds!
     - Then tease how today's new medical discoveries are changing what we know about the human body, and preview the 5 breakthroughs.
-    - Provide 4 specific, visually distinct Pexels video search queries (AVOID generic "doctor hospital" — use vivid visuals like "pouring morning coffee", "human eye macro", "glowing brain neurons", "person running sunrise").
+    - Also generate a 2-line punchy YouTube Thumbnail Text (Line 1: 2-3 words in White, Line 2: 2-3 shocking words in Yellow, max 18 characters per line, e.g., Line 1: "POOR SLEEP" / Line 2: "SHRINKS YOUR BRAIN!").
+    - Provide 4 specific, visually distinct Pexels video search queries for the intro.
 
     Return ONLY valid JSON:
     {{
       "youtube_title": "Curiosity-driven viral medical YouTube title under 85 chars",
+      "thumbnail_line1": "2-3 WORDS MAX 18 CHARS",
+      "thumbnail_line2": "2-3 SHOCKING WORDS",
       "youtube_description": "Engaging SEO description...",
       "youtube_tags": ["medical breakthroughs", "health news", "human body"],
       "intro_narration": "135 words spoken conversational storytelling only...",
@@ -250,7 +265,7 @@ def build_storytelling_script(articles):
     meta_data = clean_json_response(ask_gemini(intro_prompt))
     segments.append({
         "story_number": 0,
-        "source_badge": "BREAKING HEALTH SCIENCE  |  VERIFIED RESEARCH",
+        "source_badge": "BREAKING HEALTH SCIENCE  |  TODAY'S TOP 5",
         "headline": meta_data.get("youtube_title", "5 NEW DISCOVERIES CHANGING HUMAN HEALTH").upper()[:62],
         "narration": meta_data["intro_narration"],
         "queries": meta_data.get("visual_queries", ["human brain neurons", "dna strand rotation", "heartbeat monitor", "morning sunlight nature"])
@@ -259,10 +274,10 @@ def build_storytelling_script(articles):
 
     for idx, article in enumerate(articles):
         next_story_title = articles[idx + 1]["title"] if idx + 1 < len(articles) else "our final health takeaway"
-        print(f"Writing Storytelling Acts for Breakthrough {idx+1}/5...")
+        print(f"Writing Dynamic Storytelling Acts for Breakthrough {idx+1}/5...")
 
         story_prompt = f"""
-        You are an elite American YouTube medical storyteller (like Institute of Human Anatomy & Veritasium).
+        You are an elite American YouTube medical storyteller.
         Transform this brand-new scientific study into a gripping, conversational story:
 
         Study Title: {article['title']}
@@ -281,28 +296,33 @@ def build_storytelling_script(articles):
         - Act 3 (The Plot Twist & Clinical Proof)
         - Act 4 (Practical Takeaway For YOU + Suspenseful Cliffhanger teasing "{next_story_title}")
 
-        ANTI-REPETITION VISUAL RULE (CRITICAL):
-        For EACH act, provide 4 HIGHLY SPECIFIC, DIVERSE physical stock-video search queries (2 to 3 English words each).
-        DO NOT repeat generic phrases like "doctor patient" or "scientist microscope". Instead, describe specific human actions, organs, foods, symptoms, nature, or daily life matching the narration (e.g., "woman headache temple", "red blood cells", "coffee cup steam", "man sleeping bed", "pills blister pack", "senior man smiling", "heart monitor screen", "dna helix glowing", "gut bacteria animation", "person walking forest").
-        Every single query across all 4 acts MUST be completely different!
+        DYNAMIC ON-SCREEN SUB-HEADLINE RULE:
+        For EACH act, write a unique, punchy `act_headline` (under 56 characters) that updates the viewer on what is happening in THAT specific act so the screen banner changes every 35 seconds!
+
+        ANTI-REPETITION VISUAL RULE:
+        For EACH act, provide 4 HIGHLY SPECIFIC, DIVERSE physical stock-video search queries (2 to 3 English words each). Every single query across all 4 acts MUST be completely different!
 
         Return ONLY valid JSON:
         {{
-          "curiosity_headline": "INTRIGUING 6-TO-9 WORD HEADLINE UNDER 58 CHARS",
+          "main_story_headline": "MAIN STORY HEADLINE UNDER 56 CHARS",
           "acts": [
             {{
+              "act_headline": "UNIQUE SUB-HEADLINE FOR ACT 1 UNDER 56 CHARS",
               "narration": "90-100 words conversational spoken narration...",
               "visual_queries": ["unique query 1", "unique query 2", "unique query 3", "unique query 4"]
             }},
             {{
+              "act_headline": "UNIQUE SUB-HEADLINE FOR ACT 2 UNDER 56 CHARS",
               "narration": "90-100 words conversational spoken narration...",
               "visual_queries": ["unique query 5", "unique query 6", "unique query 7", "unique query 8"]
             }},
             {{
+              "act_headline": "UNIQUE SUB-HEADLINE FOR ACT 3 UNDER 56 CHARS",
               "narration": "90-100 words conversational spoken narration...",
               "visual_queries": ["unique query 9", "unique query 10", "unique query 11", "unique query 12"]
             }},
             {{
+              "act_headline": "UNIQUE SUB-HEADLINE FOR ACT 4 UNDER 56 CHARS",
               "narration": "90-100 words conversational spoken narration...",
               "visual_queries": ["unique query 13", "unique query 14", "unique query 15", "unique query 16"]
             }}
@@ -310,14 +330,17 @@ def build_storytelling_script(articles):
         }}
         """
         story_data = clean_json_response(ask_gemini(story_prompt))
-        headline = story_data.get("curiosity_headline", article["title"][:58]).upper()
+        main_hl = story_data.get("main_story_headline", article["title"][:56]).upper()
 
         for a_idx, act in enumerate(story_data["acts"]):
+            stage_label = ACT_STAGE_LABELS[a_idx] if a_idx < len(ACT_STAGE_LABELS) else "MEDICAL INSIGHT"
+            act_hl = act.get("act_headline", main_hl).upper()[:60]
             segments.append({
-                "story_number": (idx + 1) if a_idx == 0 else 0,  # Triggers Dedicated TV Transition Bumper before Act 1!
+                "story_number": (idx + 1) if a_idx == 0 else 0,
                 "story_source": article["source"].upper(),
-                "source_badge": f"BREAKTHROUGH #{idx+1}  |  SOURCE: {article['source'].upper()}",
-                "headline": headline,
+                "main_story_headline": main_hl,
+                "source_badge": f"BREAKTHROUGH #{idx+1}  |  {stage_label}  |  {article['source'].upper()}",
+                "headline": act_hl,
                 "narration": act["narration"],
                 "queries": act.get("visual_queries", random.sample(FALLBACK_VIDEO_QUERIES, 4))
             })
@@ -361,10 +384,8 @@ def create_voiceover(text, output_file):
     raise Exception("Failed to generate voiceover audio.")
 
 def generate_broadcast_transition_sound(wav_path, duration=2.4):
-    """Synthesizes a sleek, BBC/Vox-style warm harmonic broadcast transition chime + soft whoosh."""
     sample_rate = 44100
     n_samples = int(sample_rate * duration)
-    # Warm futuristic C-Major-9 chord frequencies (C4, E4, G4, B4, D5)
     freqs = [261.63, 329.63, 392.00, 493.88, 587.33]
 
     with wave.open(wav_path, "w") as wf:
@@ -375,21 +396,19 @@ def generate_broadcast_transition_sound(wav_path, duration=2.4):
         frames = bytearray()
         for i in range(n_samples):
             t = i / sample_rate
-            # Smooth attack and exponential decay envelope
             attack = min(1.0, t / 0.18)
             decay = math.exp(-2.2 * t)
-            env = attack * decay * 0.22
+            env = attack * decay * 0.20
 
             val = 0.0
             for idx, f in enumerate(freqs):
-                # Slight arpeggio delay per note for a luxury TV network feel
                 note_delay = idx * 0.06
                 if t >= note_delay:
                     nt = t - note_delay
                     n_env = min(1.0, nt / 0.10) * math.exp(-2.4 * nt)
                     val += math.sin(2.0 * math.pi * f * nt) * n_env
 
-            sample = max(-0.95, min(0.95, (val / len(freqs)) * env * 3.5))
+            sample = max(-0.90, min(0.90, (val / len(freqs)) * env * 3.2))
             pcm = int(sample * 32767)
             frames.extend(struct.pack("<hh", pcm, pcm))
         wf.writeframes(frames)
@@ -404,7 +423,7 @@ def get_media_duration(file_path):
     except Exception:
         return 10.0
 
-# ==================== 7. DEEP MULTI-PAGE PEXELS DOWNLOADER (ZERO REPETITION) ====================
+# ==================== 7. DEEP MULTI-PAGE PEXELS DOWNLOADER ====================
 def score_video_relevance(video_obj, query):
     slug = video_obj.get("url", "").lower()
     keywords = [w.lower() for w in re.findall(r"\w+", query) if len(w) > 2]
@@ -430,7 +449,6 @@ def download_strict_video(query, dest_path):
             if r.status_code == 200:
                 all_vids = r.json().get("videos", [])
                 fresh_vids = [v for v in all_vids if str(v.get("id")) not in used_pexels_ids]
-                # Sort by relevance, then shuffle among the top 6 matches for visual variety
                 fresh_vids.sort(key=lambda v: score_video_relevance(v, q), reverse=True)
                 top_pool = fresh_vids[:6]
                 random.shuffle(top_pool)
@@ -452,38 +470,34 @@ def download_strict_video(query, dest_path):
             print(f"Video search note for '{q}': {e}")
     return False
 
-# ==================== 8. TV GRAPHICS & CHAPTER TRANSITION BUMPERS ====================
+# ==================== 8. TV GRAPHICS, BUMPERS & AUTO THUMBNAIL GENERATOR ====================
 def create_broadcast_overlay(headline, source_badge, output_png):
     img = Image.new("RGBA", (1280, 720), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
 
-    # Top-right Sleek Badge
     draw.rectangle([985, 30, 1242, 68], fill=(12, 24, 48, 225))
     draw.rectangle([985, 30, 992, 68], fill=(0, 205, 245, 255))
 
-    # Modern Lower-Third Overlay
     draw.rectangle([0, 604, 1280, 688], fill=(8, 18, 38, 235))
     draw.rectangle([0, 597, 1280, 604], fill=(0, 200, 240, 255))
-    draw.rectangle([40, 562, 600, 597], fill=(0, 130, 180, 255))
+    draw.rectangle([40, 562, 740, 597], fill=(0, 130, 180, 255))
 
     try:
-        font_badge = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 17)
+        font_badge = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 16)
         font_main = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 25)
     except Exception:
         font_badge = ImageFont.load_default()
         font_main = ImageFont.load_default()
 
     draw.text((1005, 40), "MEDICAL SCIENCE HD", fill=(255, 255, 255, 255), font=font_badge)
-    draw.text((55, 571), source_badge[:60], fill=(255, 255, 255, 255), font=font_badge)
+    draw.text((55, 571), source_badge[:68], fill=(255, 255, 255, 255), font=font_badge)
     draw.text((45, 630), headline[:66], fill=(255, 255, 255, 255), font=font_main)
     img.save(output_png)
 
 def create_story_bumper_card(story_num, headline, source_name, output_png):
-    """Creates a full-screen translucent TV Chapter Transition Bumper Card."""
     img = Image.new("RGBA", (1280, 720), (6, 14, 32, 205))
     draw = ImageDraw.Draw(img)
 
-    # Sleek center glass frame & glowing accent bars
     draw.rectangle([140, 190, 1140, 530], fill=(10, 24, 52, 240))
     draw.rectangle([140, 190, 1140, 200], fill=(0, 210, 255, 255))
     draw.rectangle([140, 522, 1140, 530], fill=(230, 35, 55, 255))
@@ -500,7 +514,6 @@ def create_story_bumper_card(story_num, headline, source_name, output_png):
 
     draw.text((495, 247), f"BREAKTHROUGH #{story_num} OF 5", fill=(255, 255, 255, 255), font=font_pill)
 
-    # Split headline into 2 balanced centered lines if needed
     words = headline.split()
     mid = max(1, len(words) // 2)
     line1 = " ".join(words[:mid])
@@ -513,15 +526,70 @@ def create_story_bumper_card(story_num, headline, source_name, output_png):
     draw.text((200, 465), f"VERIFIED SOURCE: {source_name}", fill=(190, 215, 240, 255), font=font_sub)
     img.save(output_png)
 
+def generate_youtube_thumbnail(meta_data, output_jpg="thumbnail.jpg"):
+    """Generates a High-CTR 1280x720 YouTube Thumbnail from the lead medical video frame."""
+    print("Designing High-CTR YouTube Thumbnail (thumbnail.jpg)...")
+    frame_png = "temp/thumb_frame.png"
+    source_vid = "temp/raw_0_0.mp4"
+    if not os.path.exists(source_vid):
+        source_vid = "final_video.mp4"
+
+    subprocess.run([
+        "ffmpeg", "-y", "-ss", "00:00:02.5", "-i", source_vid,
+        "-frames:v", "1", "-vf", "scale=1280:720:force_original_aspect_ratio=increase,crop=1280:720",
+        frame_png
+    ], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    if os.path.exists(frame_png):
+        bg = Image.open(frame_png).convert("RGBA")
+        bg = ImageEnhance.Contrast(bg).enhance(1.22)
+        bg = ImageEnhance.Color(bg).enhance(1.25)
+    else:
+        bg = Image.new("RGBA", (1280, 720), (12, 28, 58, 255))
+
+    # Cinematic dark gradient overlay on bottom and left for maximum text readability
+    overlay = Image.new("RGBA", (1280, 720), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(overlay)
+    for y in range(280, 720):
+        alpha = int(min(242, ((y - 280) / 440) * 245))
+        draw.line([(0, y), (1280, y)], fill=(6, 14, 30, alpha))
+
+    # Top-left glowing red "NEW MEDICAL STUDY" pill badge
+    draw.rectangle([55, 45, 495, 108], fill=(220, 20, 38, 255))
+    draw.rectangle([0, 704, 1280, 720], fill=(0, 215, 255, 255))
+
+    try:
+        font_badge = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 30)
+        font_huge = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 76)
+    except Exception:
+        font_badge = ImageFont.load_default()
+        font_huge = ImageFont.load_default()
+
+    draw.text((80, 59), "NEW MEDICAL STUDY", fill=(255, 255, 255, 255), font=font_badge)
+
+    line1 = meta_data.get("thumbnail_line1", "SCIENTISTS WARN:").upper()[:20]
+    line2 = meta_data.get("thumbnail_line2", "HIDDEN BODY RISK!").upper()[:20]
+
+    # Heavy black drop-shadow + crisp White & Yellow giant text
+    for dx, dy in [(-4, -4), (4, -4), (-4, 4), (4, 4), (0, 6)]:
+        draw.text((60 + dx, 455 + dy), line1, fill=(0, 0, 0, 245), font=font_huge)
+        draw.text((60 + dx, 555 + dy), line2, fill=(0, 0, 0, 245), font=font_huge)
+
+    draw.text((60, 455), line1, fill=(255, 255, 255, 255), font=font_huge)
+    draw.text((60, 555), line2, fill=(255, 230, 0, 255), font=font_huge)
+
+    final_thumb = Image.alpha_composite(bg, overlay).convert("RGB")
+    final_thumb.save(output_jpg, "JPEG", quality=92)
+
 def render_story_transition_bumper(story_num, segment):
-    """Renders a 2.4-second kinematic TV Chapter Transition Clip with harmonic chime."""
     bumper_png = f"temp/bumper_{story_num}.png"
     bumper_wav = f"temp/bumper_{story_num}.wav"
     bumper_raw = f"temp/bumper_raw_{story_num}.mp4"
     bumper_out = f"temp/bumper_out_{story_num}.mp4"
     dur = 2.4
 
-    create_story_bumper_card(story_num, segment["headline"], segment.get("story_source", "MEDICAL RESEARCH"), bumper_png)
+    hl = segment.get("main_story_headline", segment["headline"])
+    create_story_bumper_card(story_num, hl, segment.get("story_source", "MEDICAL RESEARCH"), bumper_png)
     generate_broadcast_transition_sound(bumper_wav, duration=dur)
 
     q = segment["queries"][0] if segment.get("queries") else "medical technology"
@@ -572,13 +640,11 @@ def render_scene(idx, segment):
         if download_strict_video(q, raw_path):
             raw_files.append(raw_path)
 
-    # Ensure exactly 4 clips for smooth 4-shot xfade choreography
     while len(raw_files) < 4 and raw_files:
         raw_files.append(raw_files[-1])
 
     xfade_dur = 0.65
     num_clips = 4
-    # Exact clip duration so that after 3 overlapping xfade transitions, total duration == target_dur
     clip_dur = (target_dur + (num_clips - 1) * xfade_dur) / num_clips
 
     slot_clips = []
@@ -593,7 +659,6 @@ def render_scene(idx, segment):
         ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         slot_clips.append(slot_out)
 
-    # Pick 3 distinct broadcast xfade transitions for this scene
     t1, t2, t3 = random.sample(XFADE_TRANSITIONS, 3)
     off1 = clip_dur - xfade_dur
     off2 = 2 * clip_dur - 2 * xfade_dur
@@ -641,11 +706,14 @@ def save_youtube_package(meta_data, chapters, articles):
     sources_list = "\n".join([f"• Breakthrough #{i+1} ({a['source']}): {a['title']}\n  {a['link']}" for i, a in enumerate(articles)])
 
     content = f"""====================================================================
-🎬 READY-TO-COPY YOUTUBE PACKAGE (PRO BROADCAST TRANSITIONS)
+🎬 GOLD-STANDARD YOUTUBE PACKAGE (VIDEO + HIGH-CTR THUMBNAIL READY)
 ====================================================================
 
 📌 YOUTUBE TITLE (Copy & Paste):
 {meta_data.get('youtube_title', '5 New Medical Breakthroughs Changing Human Health')}
+
+🖼️ CUSTOM YOUTUBE THUMBNAIL:
+Download 'thumbnail.jpg' from Assets below and upload it as your video thumbnail!
 
 --------------------------------------------------------------------
 📝 YOUTUBE DESCRIPTION (Copy & Paste):
@@ -681,21 +749,20 @@ if __name__ == "__main__":
         story_num = seg.get("story_number", 0)
         if story_num > 0:
             art = articles[story_num - 1]
-            chapters.append(f"{format_time(current_time)} Breakthrough #{story_num}: {seg['headline'].title()} ({art['source']})")
+            main_hl = seg.get("main_story_headline", seg["headline"]).title()
+            chapters.append(f"{format_time(current_time)} Breakthrough #{story_num}: {main_hl} ({art['source']})")
             print(f"Rendering TV Broadcast Transition Bumper for Breakthrough #{story_num}...")
             bumper_file, bumper_dur = render_story_transition_bumper(story_num, seg)
             segment_files.append(bumper_file)
             current_time += bumper_dur
 
-        print(f"Rendering Scene {i+1}/{len(segments)} with Kinematic xfade Transitions...")
+        print(f"Rendering Scene {i+1}/{len(segments)} with Dynamic Banner & xfade Transitions...")
         seg_file, seg_dur = render_scene(i, seg)
         segment_files.append(seg_file)
         current_time += seg_dur
 
-    # Save all newly used Pexels video IDs to permanent memory file
     if newly_used_pexels_ids:
         append_to_file(USED_VIDEOS_FILE, newly_used_pexels_ids)
-        print(f"Saved {len(newly_used_pexels_ids)} new video IDs to {USED_VIDEOS_FILE} so they never repeat!")
 
     with open("temp/concat_list.txt", "w") as f:
         for sf in segment_files:
@@ -706,5 +773,6 @@ if __name__ == "__main__":
         "-i", "temp/concat_list.txt", "-c", "copy", "-movflags", "+faststart", "final_video.mp4"
     ], check=True)
 
+    generate_youtube_thumbnail(meta_data, "thumbnail.jpg")
     save_youtube_package(meta_data, chapters, articles)
-    print(f"SUCCESS! Pro-Transition Compressed HD Video Ready: final_video.mp4 ({format_time(current_time)})")
+    print(f"SUCCESS! Video (final_video.mp4) & Thumbnail (thumbnail.jpg) Ready! Duration: {format_time(current_time)}")
