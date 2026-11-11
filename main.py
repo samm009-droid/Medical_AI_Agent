@@ -59,11 +59,6 @@ FALLBACK_VIDEO_QUERIES = [
     "healthy heart animation", "scientist typing computer lab", "hospital corridor modern"
 ]
 
-XFADE_TRANSITIONS = [
-    "smoothleft", "smoothright", "wipeleft", "wiperight",
-    "slideleft", "slideright", "circleopen", "dissolve", "radial"
-]
-
 ACT_STAGE_LABELS = [
     "STAGE 1: THE NEW DISCOVERY",
     "STAGE 2: INSIDE YOUR BODY",
@@ -90,8 +85,9 @@ used_pexels_ids = load_set_from_file(USED_VIDEOS_FILE)
 newly_used_pexels_ids = []
 print(f"Loaded {len(used_pexels_ids)} previously used video IDs from permanent memory.")
 
-# ==================== 3. SMART AI MODEL DETECTOR ====================
-genai.configure(api_key=GEMINI_API_KEY)
+# ==================== 3. NON-BLOCKING REST AI DETECTOR (NEVER HANGS) ====================
+# Using transport="rest" prevents gRPC socket hangs on Linux Cloud Servers
+genai.configure(api_key=GEMINI_API_KEY, transport="rest")
 ACTIVE_GEMINI_MODEL = None
 
 def get_available_models():
@@ -131,14 +127,14 @@ def ask_gemini(prompt):
         for attempt in range(3):
             try:
                 model = genai.GenerativeModel(model_name)
-                response = model.generate_content(prompt)
+                response = model.generate_content(prompt, request_options={"timeout": 45})
                 if response and response.text:
                     ACTIVE_GEMINI_MODEL = model_name
                     return response.text.strip()
             except Exception as e:
                 err_str = str(e)
                 if "429" in err_str or "quota" in err_str.lower() or "rate" in err_str.lower():
-                    time.sleep(20)
+                    time.sleep(15)
                 else:
                     break
     raise Exception("Failed to get response from Gemini models.")
@@ -162,7 +158,7 @@ def fetch_viral_medical_news(count=5):
 
     for source_name, url in RSS_FEEDS:
         try:
-            resp = http_session.get(url, headers=BROWSER_HEADERS, timeout=15)
+            resp = http_session.get(url, headers=BROWSER_HEADERS, timeout=12)
             feed = feedparser.parse(resp.content) if resp.status_code == 200 else feedparser.parse(url)
             for idx_entry, entry in enumerate(feed.entries[:12]):
                 title = entry.get("title", "").strip()
@@ -170,11 +166,9 @@ def fetch_viral_medical_news(count=5):
                 link = entry.get("link", "").strip()
                 t_lower = title.lower()
 
-                # Extract accurate publication timestamp
                 parsed_time = entry.get("published_parsed") or entry.get("updated_parsed")
                 if parsed_time:
                     pub_ts = calendar.timegm(parsed_time)
-                    # Reject future/malformed timestamps
                     if pub_ts > now_ts + 86400:
                         pub_ts = now_ts - (idx_entry * 600)
                 else:
@@ -192,7 +186,6 @@ def fetch_viral_medical_news(count=5):
         except Exception as e:
             print(f"RSS error ({url}): {e}")
 
-    # Sort strictly by newest timestamp first
     candidates.sort(key=lambda x: x["pub_ts"], reverse=True)
 
     pool = candidates[:28]
@@ -248,8 +241,8 @@ def build_storytelling_script(articles):
     Write a high-retention 135-word "Cold-Open Hook & Intro":
     - Start Sentence #1 by addressing the viewer directly ("You") with a mind-blowing question, everyday habit, or shocking scenario from Story #1 that grabs attention in the first 5 seconds!
     - Then tease how today's new medical discoveries are changing what we know about the human body, and preview the 5 breakthroughs.
-    - Also generate a 2-line punchy YouTube Thumbnail Text (Line 1: 2-3 words in White, Line 2: 2-3 shocking words in Yellow, max 18 characters per line, e.g., Line 1: "POOR SLEEP" / Line 2: "SHRINKS YOUR BRAIN!").
-    - Provide 4 specific, visually distinct Pexels video search queries for the intro.
+    - Also generate a 2-line punchy YouTube Thumbnail Text (Line 1: 2-3 words in White, Line 2: 2-3 shocking words in Yellow, max 18 characters per line).
+    - Provide 3 specific, visually distinct Pexels video search queries for the intro.
 
     Return ONLY valid JSON:
     {{
@@ -259,7 +252,7 @@ def build_storytelling_script(articles):
       "youtube_description": "Engaging SEO description...",
       "youtube_tags": ["medical breakthroughs", "health news", "human body"],
       "intro_narration": "135 words spoken conversational storytelling only...",
-      "visual_queries": ["specific visual 1", "specific visual 2", "specific visual 3", "specific visual 4"]
+      "visual_queries": ["specific visual 1", "specific visual 2", "specific visual 3"]
     }}
     """
     meta_data = clean_json_response(ask_gemini(intro_prompt))
@@ -268,9 +261,9 @@ def build_storytelling_script(articles):
         "source_badge": "BREAKING HEALTH SCIENCE  |  TODAY'S TOP 5",
         "headline": meta_data.get("youtube_title", "5 NEW DISCOVERIES CHANGING HUMAN HEALTH").upper()[:62],
         "narration": meta_data["intro_narration"],
-        "queries": meta_data.get("visual_queries", ["human brain neurons", "dna strand rotation", "heartbeat monitor", "morning sunlight nature"])
+        "queries": meta_data.get("visual_queries", ["human brain neurons", "dna strand rotation", "heartbeat monitor"])
     })
-    time.sleep(4)
+    time.sleep(2)
 
     for idx, article in enumerate(articles):
         next_story_title = articles[idx + 1]["title"] if idx + 1 < len(articles) else "our final health takeaway"
@@ -300,7 +293,7 @@ def build_storytelling_script(articles):
         For EACH act, write a unique, punchy `act_headline` (under 56 characters) that updates the viewer on what is happening in THAT specific act so the screen banner changes every 35 seconds!
 
         ANTI-REPETITION VISUAL RULE:
-        For EACH act, provide 4 HIGHLY SPECIFIC, DIVERSE physical stock-video search queries (2 to 3 English words each). Every single query across all 4 acts MUST be completely different!
+        For EACH act, provide 3 HIGHLY SPECIFIC, DIVERSE physical stock-video search queries (2 to 3 English words each). Every single query across all 4 acts MUST be completely different!
 
         Return ONLY valid JSON:
         {{
@@ -309,22 +302,22 @@ def build_storytelling_script(articles):
             {{
               "act_headline": "UNIQUE SUB-HEADLINE FOR ACT 1 UNDER 56 CHARS",
               "narration": "90-100 words conversational spoken narration...",
-              "visual_queries": ["unique query 1", "unique query 2", "unique query 3", "unique query 4"]
+              "visual_queries": ["unique query 1", "unique query 2", "unique query 3"]
             }},
             {{
               "act_headline": "UNIQUE SUB-HEADLINE FOR ACT 2 UNDER 56 CHARS",
               "narration": "90-100 words conversational spoken narration...",
-              "visual_queries": ["unique query 5", "unique query 6", "unique query 7", "unique query 8"]
+              "visual_queries": ["unique query 4", "unique query 5", "unique query 6"]
             }},
             {{
               "act_headline": "UNIQUE SUB-HEADLINE FOR ACT 3 UNDER 56 CHARS",
               "narration": "90-100 words conversational spoken narration...",
-              "visual_queries": ["unique query 9", "unique query 10", "unique query 11", "unique query 12"]
+              "visual_queries": ["unique query 7", "unique query 8", "unique query 9"]
             }},
             {{
               "act_headline": "UNIQUE SUB-HEADLINE FOR ACT 4 UNDER 56 CHARS",
               "narration": "90-100 words conversational spoken narration...",
-              "visual_queries": ["unique query 13", "unique query 14", "unique query 15", "unique query 16"]
+              "visual_queries": ["unique query 10", "unique query 11", "unique query 12"]
             }}
           ]
         }}
@@ -342,9 +335,9 @@ def build_storytelling_script(articles):
                 "source_badge": f"BREAKTHROUGH #{idx+1}  |  {stage_label}  |  {article['source'].upper()}",
                 "headline": act_hl,
                 "narration": act["narration"],
-                "queries": act.get("visual_queries", random.sample(FALLBACK_VIDEO_QUERIES, 4))
+                "queries": act.get("visual_queries", random.sample(FALLBACK_VIDEO_QUERIES, 3))
             })
-        time.sleep(4)
+        time.sleep(2)
 
     outro_prompt = """
     Write an energetic, inspiring 95-word YouTube conclusion for a medical storytelling episode.
@@ -352,7 +345,7 @@ def build_storytelling_script(articles):
     Return ONLY valid JSON:
     {
       "outro_narration": "95 words spoken English conclusion only...",
-      "visual_queries": ["happy healthy family", "sunrise jogging park", "modern hospital exterior", "smiling doctor stethoscope"]
+      "visual_queries": ["happy healthy family", "sunrise jogging park", "modern hospital exterior"]
     }
     """
     outro_data = clean_json_response(ask_gemini(outro_prompt))
@@ -361,15 +354,15 @@ def build_storytelling_script(articles):
         "source_badge": "VERIFIED SCIENTIFIC LINKS IN DESCRIPTION",
         "headline": "WHICH BREAKTHROUGH SURPRISED YOU MOST? COMMENT BELOW!",
         "narration": outro_data["outro_narration"],
-        "queries": outro_data.get("visual_queries", random.sample(FALLBACK_VIDEO_QUERIES, 4))
+        "queries": outro_data.get("visual_queries", random.sample(FALLBACK_VIDEO_QUERIES, 3))
     })
 
     return meta_data, segments
 
-# ==================== 6. AUDIO & BROADCAST CHIME GENERATOR ====================
+# ==================== 6. TIMEOUT-PROTECTED AUDIO & CHIME GENERATOR ====================
 async def _generate_tts(text, output_file):
     communicate = edge_tts.Communicate(text, VOICE_EN, rate="+4%", pitch="-1Hz")
-    await communicate.save(output_file)
+    await asyncio.wait_for(communicate.save(output_file), timeout=35)
 
 def create_voiceover(text, output_file):
     clean_text = re.sub(r"[*#_~`]", "", text).strip()
@@ -380,7 +373,7 @@ def create_voiceover(text, output_file):
                 return
         except Exception as e:
             print(f"TTS retry {attempt+1}: {e}")
-            time.sleep(3)
+            time.sleep(2)
     raise Exception("Failed to generate voiceover audio.")
 
 def generate_broadcast_transition_sound(wav_path, duration=2.4):
@@ -417,13 +410,13 @@ def get_media_duration(file_path):
     res = subprocess.run([
         "ffprobe", "-v", "error", "-show_entries", "format=duration",
         "-of", "default=noprint_wrappers=1:nokey=1", file_path
-    ], capture_output=True, text=True)
+    ], capture_output=True, text=True, timeout=15)
     try:
         return float(res.stdout.strip())
     except Exception:
         return 10.0
 
-# ==================== 7. DEEP MULTI-PAGE PEXELS DOWNLOADER ====================
+# ==================== 7. FAST HD 720p PEXELS DOWNLOADER ====================
 def score_video_relevance(video_obj, query):
     slug = video_obj.get("url", "").lower()
     keywords = [w.lower() for w in re.findall(r"\w+", query) if len(w) > 2]
@@ -439,13 +432,13 @@ def download_strict_video(query, dest_path):
     attempts = [(query, 1), (query, random.randint(2, 4))]
     if len(words) > 2:
         attempts.append((" ".join(words[:2]), random.randint(1, 3)))
-    for fb in random.sample(FALLBACK_VIDEO_QUERIES, 5):
+    for fb in random.sample(FALLBACK_VIDEO_QUERIES, 4):
         attempts.append((fb, random.randint(1, 4)))
 
     for q, page_num in attempts:
-        url = f"https://api.pexels.com/videos/search?query={urllib.parse.quote(q)}&orientation=landscape&size=medium&per_page=35&page={page_num}"
+        url = f"https://api.pexels.com/videos/search?query={urllib.parse.quote(q)}&orientation=landscape&size=medium&per_page=30&page={page_num}"
         try:
-            r = http_session.get(url, headers=headers, timeout=15)
+            r = http_session.get(url, headers=headers, timeout=12)
             if r.status_code == 200:
                 all_vids = r.json().get("videos", [])
                 fresh_vids = [v for v in all_vids if str(v.get("id")) not in used_pexels_ids]
@@ -456,10 +449,13 @@ def download_strict_video(query, dest_path):
 
                 for v in candidates:
                     vid_id = str(v.get("id"))
-                    for vf in v.get("video_files", []):
+                    vfiles = v.get("video_files", [])
+                    # Prioritize 1280x720 HD files first for 4x faster download & encoding!
+                    vfiles.sort(key=lambda vf: abs(vf.get("width", 0) - 1280))
+                    for vf in vfiles:
                         w = vf.get("width", 0)
                         if 1280 <= w <= 1920 and vf.get("link"):
-                            vid_resp = http_session.get(vf["link"], timeout=30)
+                            vid_resp = http_session.get(vf["link"], timeout=20)
                             if vid_resp.status_code == 200 and len(vid_resp.content) > 50000:
                                 with open(dest_path, "wb") as f:
                                     f.write(vid_resp.content)
@@ -495,10 +491,10 @@ def create_broadcast_overlay(headline, source_badge, output_png):
     img.save(output_png)
 
 def create_story_bumper_card(story_num, headline, source_name, output_png):
-    img = Image.new("RGBA", (1280, 720), (6, 14, 32, 205))
+    img = Image.new("RGBA", (1280, 720), (6, 14, 32, 215))
     draw = ImageDraw.Draw(img)
 
-    draw.rectangle([140, 190, 1140, 530], fill=(10, 24, 52, 240))
+    draw.rectangle([140, 190, 1140, 530], fill=(10, 24, 52, 245))
     draw.rectangle([140, 190, 1140, 200], fill=(0, 210, 255, 255))
     draw.rectangle([140, 522, 1140, 530], fill=(230, 35, 55, 255))
     draw.rectangle([460, 235, 820, 285], fill=(220, 30, 50, 255))
@@ -527,18 +523,15 @@ def create_story_bumper_card(story_num, headline, source_name, output_png):
     img.save(output_png)
 
 def generate_youtube_thumbnail(meta_data, output_jpg="thumbnail.jpg"):
-    """Generates a High-CTR 1280x720 YouTube Thumbnail from the lead medical video frame."""
     print("Designing High-CTR YouTube Thumbnail (thumbnail.jpg)...")
     frame_png = "temp/thumb_frame.png"
-    source_vid = "temp/raw_0_0.mp4"
-    if not os.path.exists(source_vid):
-        source_vid = "final_video.mp4"
+    source_vid = "temp/raw_0_0.mp4" if os.path.exists("temp/raw_0_0.mp4") else "final_video.mp4"
 
     subprocess.run([
-        "ffmpeg", "-y", "-ss", "00:00:02.5", "-i", source_vid,
+        "ffmpeg", "-y", "-ss", "00:00:02.0", "-i", source_vid,
         "-frames:v", "1", "-vf", "scale=1280:720:force_original_aspect_ratio=increase,crop=1280:720",
         frame_png
-    ], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    ], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=20)
 
     if os.path.exists(frame_png):
         bg = Image.open(frame_png).convert("RGBA")
@@ -547,14 +540,12 @@ def generate_youtube_thumbnail(meta_data, output_jpg="thumbnail.jpg"):
     else:
         bg = Image.new("RGBA", (1280, 720), (12, 28, 58, 255))
 
-    # Cinematic dark gradient overlay on bottom and left for maximum text readability
     overlay = Image.new("RGBA", (1280, 720), (0, 0, 0, 0))
     draw = ImageDraw.Draw(overlay)
     for y in range(280, 720):
         alpha = int(min(242, ((y - 280) / 440) * 245))
         draw.line([(0, y), (1280, y)], fill=(6, 14, 30, alpha))
 
-    # Top-left glowing red "NEW MEDICAL STUDY" pill badge
     draw.rectangle([55, 45, 495, 108], fill=(220, 20, 38, 255))
     draw.rectangle([0, 704, 1280, 720], fill=(0, 215, 255, 255))
 
@@ -570,7 +561,6 @@ def generate_youtube_thumbnail(meta_data, output_jpg="thumbnail.jpg"):
     line1 = meta_data.get("thumbnail_line1", "SCIENTISTS WARN:").upper()[:20]
     line2 = meta_data.get("thumbnail_line2", "HIDDEN BODY RISK!").upper()[:20]
 
-    # Heavy black drop-shadow + crisp White & Yellow giant text
     for dx, dy in [(-4, -4), (4, -4), (-4, 4), (4, 4), (0, 6)]:
         draw.text((60 + dx, 455 + dy), line1, fill=(0, 0, 0, 245), font=font_huge)
         draw.text((60 + dx, 555 + dy), line2, fill=(0, 0, 0, 245), font=font_huge)
@@ -581,10 +571,11 @@ def generate_youtube_thumbnail(meta_data, output_jpg="thumbnail.jpg"):
     final_thumb = Image.alpha_composite(bg, overlay).convert("RGB")
     final_thumb.save(output_jpg, "JPEG", quality=92)
 
+# ==================== 9. ULTRA-FAST NON-HANGING FFMPEG STUDIO RENDERER ====================
 def render_story_transition_bumper(story_num, segment):
+    """Renders a 2.4-second TV Chapter Bumper instantaneously without infinite stream loops."""
     bumper_png = f"temp/bumper_{story_num}.png"
     bumper_wav = f"temp/bumper_{story_num}.wav"
-    bumper_raw = f"temp/bumper_raw_{story_num}.mp4"
     bumper_out = f"temp/bumper_out_{story_num}.mp4"
     dur = 2.4
 
@@ -592,33 +583,20 @@ def render_story_transition_bumper(story_num, segment):
     create_story_bumper_card(story_num, hl, segment.get("story_source", "MEDICAL RESEARCH"), bumper_png)
     generate_broadcast_transition_sound(bumper_wav, duration=dur)
 
-    q = segment["queries"][0] if segment.get("queries") else "medical technology"
-    download_strict_video(q, bumper_raw)
-
-    filter_chain = (
-        f"[0:v]scale=1280:720:force_original_aspect_ratio=increase,crop=1280:720,setsar=1,fps=24,format=yuv420p[bg];"
-        f"[bg][1:v]overlay=0:0,"
-        f"fade=t=in:st=0:d=0.45,"
-        f"fade=t=out:st=1.90:d=0.50[v]"
-    )
-
     subprocess.run([
         "ffmpeg", "-y",
-        "-stream_loop", "-1", "-i", bumper_raw,
-        "-i", bumper_png,
+        "-loop", "1", "-t", f"{dur:.2f}", "-i", bumper_png,
         "-i", bumper_wav,
-        "-filter_complex", filter_chain,
-        "-map", "[v]", "-map", "2:a",
+        "-vf", "fps=24,format=yuv420p,fade=t=in:st=0:d=0.40,fade=t=out:st=1.95:d=0.45",
+        "-map", "0:v", "-map", "1:a",
         "-t", f"{dur:.2f}",
-        "-c:v", "libx264", "-preset", "veryfast", "-crf", "26",
-        "-maxrate", "950k", "-bufsize", "1900k", "-pix_fmt", "yuv420p",
+        "-c:v", "libx264", "-preset", "ultrafast", "-crf", "26",
         "-c:a", "aac", "-b:a", "96k", "-ar", "44100", "-ac", "2",
         bumper_out
-    ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30)
 
     return bumper_out, dur
 
-# ==================== 9. KINEMATIC XFADE SCENE RENDERER ====================
 def render_scene(idx, segment):
     audio_path = f"temp/audio_{idx}.mp3"
     overlay_path = f"temp/overlay_{idx}.png"
@@ -626,71 +604,75 @@ def render_scene(idx, segment):
 
     create_voiceover(segment["narration"], audio_path)
     audio_dur = get_media_duration(audio_path)
-    target_dur = audio_dur + 0.40
+    target_dur = audio_dur + 0.35
 
     create_broadcast_overlay(segment["headline"], segment["source_badge"], overlay_path)
 
     scene_queries = list(segment["queries"])
-    while len(scene_queries) < 4:
+    while len(scene_queries) < 3:
         scene_queries.append(random.choice(FALLBACK_VIDEO_QUERIES))
 
     raw_files = []
-    for q_idx, q in enumerate(scene_queries[:4]):
+    for q_idx, q in enumerate(scene_queries[:3]):
         raw_path = f"temp/raw_{idx}_{q_idx}.mp4"
         if download_strict_video(q, raw_path):
             raw_files.append(raw_path)
 
-    while len(raw_files) < 4 and raw_files:
+    while len(raw_files) < 3 and raw_files:
         raw_files.append(raw_files[-1])
 
-    xfade_dur = 0.65
-    num_clips = 4
-    clip_dur = (target_dur + (num_clips - 1) * xfade_dur) / num_clips
-
+    slot_dur = target_dur / 3.0
+    fade_out_st = max(0.1, slot_dur - 0.30)
     slot_clips = []
-    for r_idx, r_path in enumerate(raw_files[:4]):
+
+    for r_idx, r_path in enumerate(raw_files[:3]):
         slot_out = f"temp/slot_{idx}_{r_idx}.mp4"
+        # Finite stream_loop 3 + input -t cap guarantees FFmpeg NEVER hangs and adds smooth transitions between every cut!
+        vf_slot = (
+            f"scale=1280:720:force_original_aspect_ratio=increase,crop=1280:720,"
+            f"setsar=1,fps=24,format=yuv420p,"
+            f"fade=t=in:st=0:d=0.30,fade=t=out:st={fade_out_st:.2f}:d=0.30"
+        )
         subprocess.run([
-            "ffmpeg", "-y", "-stream_loop", "-1", "-i", r_path,
-            "-t", f"{clip_dur:.2f}",
-            "-vf", "scale=1280:720:force_original_aspect_ratio=increase,crop=1280:720,setsar=1,fps=24,format=yuv420p",
-            "-an", "-c:v", "libx264", "-preset", "ultrafast", "-crf", "25",
+            "ffmpeg", "-y",
+            "-stream_loop", "3", "-t", f"{slot_dur:.2f}", "-i", r_path,
+            "-vf", vf_slot,
+            "-an", "-c:v", "libx264", "-preset", "ultrafast", "-crf", "26",
             slot_out
-        ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=45)
         slot_clips.append(slot_out)
 
-    t1, t2, t3 = random.sample(XFADE_TRANSITIONS, 3)
-    off1 = clip_dur - xfade_dur
-    off2 = 2 * clip_dur - 2 * xfade_dur
-    off3 = 3 * clip_dur - 3 * xfade_dur
+    concat_slots_txt = f"temp/slots_{idx}.txt"
+    with open(concat_slots_txt, "w") as f:
+        for sc in slot_clips:
+            f.write(f"file '{os.path.abspath(sc)}'\n")
 
-    fade_out_start = max(0.1, target_dur - 0.35)
+    bg_joined = f"temp/bg_{idx}.mp4"
+    subprocess.run([
+        "ffmpeg", "-y", "-f", "concat", "-safe", "0",
+        "-i", concat_slots_txt, "-c", "copy", bg_joined
+    ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30)
 
-    filter_complex = (
-        f"[0:v][1:v]xfade=transition={t1}:duration={xfade_dur}:offset={off1:.2f}[v01];"
-        f"[v01][2:v]xfade=transition={t2}:duration={xfade_dur}:offset={off2:.2f}[v02];"
-        f"[v02][3:v]xfade=transition={t3}:duration={xfade_dur}:offset={off3:.2f}[bg];"
-        f"[bg][4:v]overlay=0:0,"
+    seg_fade_out = max(0.1, target_dur - 0.35)
+    filter_chain = (
+        f"[0:v][1:v]overlay=0:0,"
         f"fade=t=in:st=0:d=0.30,"
-        f"fade=t=out:st={fade_out_start:.2f}:d=0.35[v]"
+        f"fade=t=out:st={seg_fade_out:.2f}:d=0.35[v]"
     )
 
     subprocess.run([
         "ffmpeg", "-y",
-        "-i", slot_clips[0],
-        "-i", slot_clips[1],
-        "-i", slot_clips[2],
-        "-i", slot_clips[3],
+        "-i", bg_joined,
         "-i", overlay_path,
         "-i", audio_path,
-        "-filter_complex", filter_complex,
-        "-map", "[v]", "-map", "5:a",
+        "-filter_complex", filter_chain,
+        "-map", "[v]", "-map", "2:a",
         "-t", f"{target_dur:.2f}",
         "-c:v", "libx264", "-preset", "veryfast", "-crf", "27",
         "-maxrate", "950k", "-bufsize", "1900k", "-pix_fmt", "yuv420p",
         "-c:a", "aac", "-b:a", "96k", "-ar", "44100", "-ac", "2",
         out_segment
-    ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=60)
 
     return out_segment, target_dur
 
@@ -756,7 +738,7 @@ if __name__ == "__main__":
             segment_files.append(bumper_file)
             current_time += bumper_dur
 
-        print(f"Rendering Scene {i+1}/{len(segments)} with Dynamic Banner & xfade Transitions...")
+        print(f"Rendering Turbo Scene {i+1}/{len(segments)} with Dynamic Banner & Smooth Transitions...")
         seg_file, seg_dur = render_scene(i, seg)
         segment_files.append(seg_file)
         current_time += seg_dur
