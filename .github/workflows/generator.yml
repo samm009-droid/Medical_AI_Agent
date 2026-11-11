@@ -29,8 +29,20 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Prepare Pre-installed Media & Fonts (Zero apt-get)
+      - name: Install Python Libraries
         run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Setup FFmpeg, FFprobe & Fonts (Direct GitHub CDN - Zero apt-get)
+        run: |
+          if ! command -v ffmpeg >/dev/null 2>&1 || ! command -v ffprobe >/dev/null 2>&1; then
+            echo "⚡ Downloading static FFmpeg & FFprobe directly from GitHub CDN..."
+            curl -L --retry 3 --connect-timeout 15 -o /tmp/ffmpeg.tar.xz "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz"
+            sudo tar -xJf /tmp/ffmpeg.tar.xz -C /usr/local/bin --strip-components=2 --wildcards "*/bin/ffmpeg" "*/bin/ffprobe"
+            sudo chmod +x /usr/local/bin/ffmpeg /usr/local/bin/ffprobe
+            rm -f /tmp/ffmpeg.tar.xz
+          fi
           sudo mkdir -p /usr/share/fonts/truetype/dejavu
           SYS_BOLD=$(find /usr/share/fonts -iname "*bold*.ttf" | head -n 1)
           SYS_REG=$(find /usr/share/fonts -iname "*.ttf" ! -iname "*bold*" | head -n 1)
@@ -42,12 +54,8 @@ jobs:
             sudo cp "$SYS_REG" /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf
           fi
           ffmpeg -version | head -n 1
-          echo "✅ Media tools & fonts ready in 0.1s without apt-get!"
-
-      - name: Install Python Libraries
-        run: |
-          pip install --upgrade pip
-          pip install -r requirements.txt
+          ffprobe -version | head -n 1
+          echo "✅ FFmpeg, FFprobe & Fonts verified and ready!"
 
       - name: Run AI Agent (Full Features + Thumbnail + Fast Render)
         env:
