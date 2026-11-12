@@ -55,7 +55,7 @@ MEDICAL_PRIORITY_KEYWORDS = [
     "diabetes", "insulin", "glucose", "obesity", "metabolism", "weight loss",
     "liver", "kidney", "lung", "gut", "microbiome", "immune", "inflammation",
     "longevity", "aging", "anti-aging", "lifespan", "dna", "gene", "genetic",
-    "Stem cell", "drug", "pill", "therapy", "treatment", "clinical trial",
+    "stem cell", "drug", "pill", "therapy", "treatment", "clinical trial",
     "vitamin", "supplement", "sleep", "pain", "virus", "infection", "antibiotic"
 ]
 
@@ -193,6 +193,38 @@ def fetch_fresh_medical_news(count=5):
 # ==========================================
 # 4. كتابة السيناريو بالذكاء الاصطناعي (Gemini)
 # ==========================================
+def get_available_gemini_models():
+    """يكتشف تلقائياً أحدث نماذج Gemini المتاحة في حساب المستخدم لمنع أخطاء 404 مستقبلاً"""
+    preferred = [
+        "gemini-3.8-flash",
+        "gemini-flash-latest",
+        "gemini-3-flash-preview",
+        "gemini-2.5-flash-lite",
+        "gemini-2.5-flash",
+    ]
+    discovered = []
+    try:
+        for m in genai.list_models():
+            methods = getattr(m, "supported_generation_methods", []) or []
+            if "generateContent" in methods:
+                name = m.name.replace("models/", "")
+                low = name.lower()
+                if "gemini" in low and not any(x in low for x in ["embedding", "imagen", "vision", "tts", "audio", "robotics", "computer-use"]):
+                    discovered.append(name)
+    except Exception as e:
+        print(f"⚠️ Note: dynamic model listing returned: {e}")
+
+    flash_models = [m for m in discovered if "flash" in m.lower()]
+    other_models = [m for m in discovered if "flash" not in m.lower()]
+
+    final_list = []
+    # نضع أولاً النماذج المكتشفة فعلياً في السيرفر + النماذج المفضلة
+    for m in preferred + flash_models + other_models:
+        if m not in final_list:
+            final_list.append(m)
+    print(f"🔎 Available Gemini models to try: {final_list[:6]}")
+    return final_list
+
 def generate_script_with_gemini(articles):
     print("🧠 Generating high-retention documentary script via Gemini AI...")
     genai.configure(api_key=GEMINI_API_KEY)
@@ -283,10 +315,10 @@ Return ONLY valid JSON matching this exact structure:
 }}
 """
 
-    models_to_try = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]
+    models_to_try = get_available_gemini_models()
     last_err = None
     for model_name in models_to_try:
-        for attempt in range(3):
+        for attempt in range(2):
             try:
                 model = genai.GenerativeModel(model_name)
                 response = model.generate_content(
@@ -302,7 +334,10 @@ Return ONLY valid JSON matching this exact structure:
                     return data
             except Exception as e:
                 last_err = e
-                print(f"⚠️ Gemini ({model_name}) attempt {attempt+1} failed: {e}")
+                err_str = str(e)
+                print(f"⚠️ Gemini ({model_name}) attempt {attempt+1} failed: {err_str[:160]}")
+                if "404" in err_str or "no longer available" in err_str.lower() or "not found" in err_str.lower():
+                    break  # انتقل فوراً للنموذج التالي إذا كان الإصدار قديماً
                 time.sleep(4)
     raise RuntimeError(f"Failed to generate script from Gemini: {last_err}")
 
@@ -323,7 +358,7 @@ def generate_voiceover(text, out_path):
         except Exception as e:
             print(f"⚠️ TTS attempt {attempt+1} error: {e}")
             time.sleep(3)
-    raise RuntimeError(f"Failed to generate TTS audio for: { out_path }")
+    raise RuntimeError(f"Failed to generate TTS audio for: {out_path}")
 
 def create_chime_wav(filepath, duration=2.4, sample_rate=44100):
     n_samples = int(duration * sample_rate)
@@ -417,7 +452,6 @@ def find_repo_logo():
         return _CACHED_LOGO_PATH
     exts = (".png", ".jpg", ".jpeg", ".webp")
     ignore_prefixes = ("temp_", "ov_", "ch_", "final_")
-    # نبحث أولاً عن أي ملف يحتوي اسمه على logo، وإلا نأخذ أول صورة مرفوعة في المستودع
     candidates = []
     for fname in os.listdir("."):
         low = fname.lower()
@@ -454,7 +488,6 @@ def build_logo_badge(size=72, alpha=235):
         except Exception as e:
             print(f"⚠️ Fallback logo badge used due to: {e}")
 
-    # رسم احتياطي للشعار في حال عدم وجود ملف الصورة
     bdraw = ImageDraw.Draw(badge)
     bdraw.ellipse((2, 2, size - 3, size - 3), fill=(8, 18, 38, alpha), outline=(0, 215, 255, 230), width=2)
     f5 = get_font(int(size * 0.55), bold=True)
@@ -493,7 +526,6 @@ def create_chapter_bumper(story_idx, headline, category, out_path):
     img = Image.new("RGB", (1280, 720), (6, 13, 26))
     draw = ImageDraw.Draw(img)
 
-    # إطار خارجي أنيق
     draw.rectangle([28, 28, 1252, 692], outline=(0, 180, 230), width=2)
     draw.rectangle([0, 708, 1280, 720], fill=(0, 215, 255))
 
@@ -518,7 +550,6 @@ def create_chapter_bumper(story_idx, headline, category, out_path):
 
     draw.line([480, 295, 800, 295], fill=(40, 80, 120), width=2)
 
-    # تقسيم العنوان في المنتصف
     words = headline.upper().split()
     lines, cur = [], ""
     for w in words:
@@ -551,11 +582,11 @@ def build_scene_clip(narration, banner_head, banner_sub, queries, story_idx, sce
     audio_clip = AudioFileClip(aud_path)
     dur = audio_clip.duration + 0.25
 
-    video_Paths = fetch_pexels_clips(queries, used_videos, clips_needed=3, prefix=scene_id)
+    video_paths = fetch_pexels_clips(queries, used_videos, clips_needed=3, prefix=scene_id)
     sub_clips = []
-    target_each = dur / max(1, len(video_Paths))
+    target_each = dur / max(1, len(video_paths))
 
-    for vp in video_Paths:
+    for vp in video_paths:
         try:
             vc = VideoFileClip(vp).without_audio()
             vc = vc.resize((1280, 720))
