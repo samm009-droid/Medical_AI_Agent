@@ -156,7 +156,6 @@ def fetch_fresh_medical_news(count=5):
         except Exception as e:
             print(f"⚠️ Warning fetching {source_name}: {e}")
 
-    # ترتيب حسب الأهمية الطبية مع ضمان تنوع المصادر (بحد أقصى خبران من نفس المصدر)
     candidates.sort(key=lambda x: x["score"], reverse=True)
     selected = []
     source_counts = {}
@@ -174,7 +173,6 @@ def fetch_fresh_medical_news(count=5):
         seen_norms.add(item["norm_title"])
         source_counts[src] = source_counts.get(src, 0) + 1
 
-    # إذا لم يكتمل العدد، نكمل من الباقي الآمن
     for item in candidates:
         if len(selected) >= count:
             break
@@ -194,13 +192,13 @@ def fetch_fresh_medical_news(count=5):
 # 4. كتابة السيناريو بالذكاء الاصطناعي (Gemini)
 # ==========================================
 def get_available_gemini_models():
-    """يكتشف تلقائياً أحدث نماذج Gemini المتاحة في حساب المستخدم لمنع أخطاء 404 مستقبلاً"""
+    """يرتب نماذج Gemini بحيث يبدأ بالنموذج السريع المستقر أولاً"""
     preferred = [
-        "gemini-3.8-flash",
-        "gemini-flash-latest",
         "gemini-3-flash-preview",
         "gemini-2.5-flash-lite",
-        "gemini-2.5-flash",
+        "gemini-flash-lite-latest",
+        "gemini-3.8-flash",
+        "gemini-flash-latest",
     ]
     discovered = []
     try:
@@ -218,7 +216,6 @@ def get_available_gemini_models():
     other_models = [m for m in discovered if "flash" not in m.lower()]
 
     final_list = []
-    # نضع أولاً النماذج المكتشفة فعلياً في السيرفر + النماذج المفضلة
     for m in preferred + flash_models + other_models:
         if m not in final_list:
             final_list.append(m)
@@ -318,46 +315,46 @@ Return ONLY valid JSON matching this exact structure:
     models_to_try = get_available_gemini_models()
     last_err = None
     for model_name in models_to_try:
-        for attempt in range(2):
-            try:
-                model = genai.GenerativeModel(model_name)
-                response = model.generate_content(
-                    prompt,
-                    generation_config={"response_mime_type": "application/json", "temperature": 0.7}
-                )
-                raw = response.text.strip()
-                raw = re.sub(r"^```json\s*", "", raw)
-                raw = re.sub(r"\s*```$", "", raw)
-                data = json.loads(raw)
-                if "stories" in data and len(data["stories"]) == 5:
-                    print(f"✅ Script generated successfully using {model_name}!")
-                    return data
-            except Exception as e:
-                last_err = e
-                err_str = str(e)
-                print(f"⚠️ Gemini ({model_name}) attempt {attempt+1} failed: {err_str[:160]}")
-                if "404" in err_str or "no longer available" in err_str.lower() or "not found" in err_str.lower():
-                    break  # انتقل فوراً للنموذج التالي إذا كان الإصدار قديماً
-                time.sleep(4)
+        try:
+            model = genai.GenerativeModel(model_name)
+            response = model.generate_content(
+                prompt,
+                generation_config={"response_mime_type": "application/json", "temperature": 0.7},
+                request_options={"timeout": 90}
+            )
+            raw = response.text.strip()
+            raw = re.sub(r"^```json\s*", "", raw)
+            raw = re.sub(r"\s*```$", "", raw)
+            data = json.loads(raw)
+            if "stories" in data and len(data["stories"]) == 5:
+                print(f"✅ Script generated successfully using {model_name}!")
+                return data
+        except Exception as e:
+            last_err = e
+            err_str = str(e)
+            print(f"⚠️ Gemini ({model_name}) failed: {err_str[:160]}")
+            time.sleep(2)
     raise RuntimeError(f"Failed to generate script from Gemini: {last_err}")
 
 # ==========================================
-# 5. توليد الصوت البشري والمؤثر الصوتي للانتقالات
+# 5. توليد الصوت البشري (مع مؤقت حماية ضد التعليق)
 # ==========================================
 async def _edge_tts_save(text, out_path):
     communicate = edge_tts.Communicate(text, voice="en-US-ChristopherNeural", rate="+4%", pitch="-1Hz")
-    await communicate.save(out_path)
+    await asyncio.wait_for(communicate.save(out_path), timeout=40.0)
 
 def generate_voiceover(text, out_path):
     clean_text = re.sub(r'[*_#`~]', '', text).strip()
-    for attempt in range(4):
+    for attempt in range(5):
         try:
+            if os.path.exists(out_path):
+                os.remove(out_path)
             asyncio.run(_edge_tts_save(clean_text, out_path))
             if os.path.exists(out_path) and os.path.getsize(out_path) > 1000:
                 return
         except Exception as e:
-            print(f"⚠️ TTS attempt {attempt+1} error: {e}")
-            time.sleep(3)
+            print(f"⚠️ TTS attempt {attempt+1} error/timeout: {e}")
+            time.sleep(2)
     raise RuntimeError(f"Failed to generate TTS audio for: {out_path}")
 
 def create_chime_wav(filepath, duration=2.4, sample_rate=44100):
@@ -377,7 +374,7 @@ def create_chime_wav(filepath, duration=2.4, sample_rate=44100):
             wav_file.writeframesraw(struct.pack('<h', val))
 
 # ==========================================
-# 6. تحميل مقاطع الفيديو المتحركة من Pexels
+# 6. تحميل مقاطع الفيديو المتحركة 720p HD من Pexels
 # ==========================================
 def fetch_pexels_clips(queries, used_videos, clips_needed=3, prefix="scene"):
     headers = {"Authorization": PEXELS_API_KEY}
@@ -389,7 +386,7 @@ def fetch_pexels_clips(queries, used_videos, clips_needed=3, prefix="scene"):
             break
         try:
             url = f"https://api.pexels.com/videos/search?query={requests.utils.quote(q)}&per_page=12&orientation=landscape"
-            r = requests.get(url, headers=headers, timeout=15)
+            r = requests.get(url, headers=headers, timeout=12)
             if r.status_code != 200:
                 continue
             videos = r.json().get("videos", [])
@@ -400,29 +397,30 @@ def fetch_pexels_clips(queries, used_videos, clips_needed=3, prefix="scene"):
                 if vid_id in used_videos:
                     continue
                 files = v.get("video_files", [])
-                best_file = None
-                for vf in files:
-                    w = vf.get("width", 0) or 0
-                    h = vf.get("height", 0) or 0
-                    if w >= 1280 and h >= 720 and vf.get("file_type") == "video/mp4":
-                        best_file = vf
-                        break
-                if not best_file and files:
-                    best_file = files[0]
-                if not best_file or not best_file.get("link"):
+                mp4_files = [
+                    vf for vf in files
+                    if vf.get("file_type") == "video/mp4" and vf.get("link") and (vf.get("width") or 0) >= 640
+                ]
+                if not mp4_files:
                     continue
+                # نختار المقطع الأقرب لدقة 1280x720 لتجنب تحميل ملفات 4K الضخمة جداً
+                mp4_files.sort(key=lambda vf: abs((vf.get("width") or 1280) - 1280))
+                best_file = mp4_files[0]
 
                 out_name = f"temp_{prefix}_{len(downloaded)}_{vid_id}.mp4"
-                vr = requests.get(best_file["link"], stream=True, timeout=25)
-                if vr.status_code == 200:
-                    with open(out_name, "wb") as f:
-                        for chunk in vr.iter_content(chunk_size=65536):
-                            if chunk:
-                                f.write(chunk)
-                    if os.path.exists(out_name) and os.path.getsize(out_name) > 50000:
-                        downloaded.append(out_name)
-                        used_videos.add(vid_id)
-                        save_to_file(USED_VIDEOS_FILE, [vid_id])
+                with requests.get(best_file["link"], stream=True, timeout=(10, 25)) as vr:
+                    if vr.status_code == 200:
+                        dl_start = time.time()
+                        with open(out_name, "wb") as f:
+                            for chunk in vr.iter_content(chunk_size=65536):
+                                if chunk:
+                                    f.write(chunk)
+                                if time.time() - dl_start > 35:
+                                    raise TimeoutError("Clip download took too long")
+                if os.path.exists(out_name) and os.path.getsize(out_name) > 50000:
+                    downloaded.append(out_name)
+                    used_videos.add(vid_id)
+                    save_to_file(USED_VIDEOS_FILE, [vid_id])
         except Exception as e:
             print(f"⚠️ Pexels fetch warning for '{q}': {e}")
 
@@ -674,6 +672,7 @@ def main():
         current_time += ch_clip.duration
 
         for a_idx, act in enumerate(story.get("acts", []), 1):
+            print(f"   🔹 Story #{idx} - Act {a_idx}/4...")
             sc_clip = build_scene_clip(
                 act["narration"],
                 act.get("banner_headline", story.get("chapter_title", "")),
@@ -710,14 +709,12 @@ def main():
         ffmpeg_params=["-crf", "27", "-maxrate", "950k", "-bufsize", "1900k", "-movflags", "+faststart"]
     )
 
-    # حفظ الأخبار المستخدمة حتى لا تتكرر أبداً
     new_used_entries = []
     for art in articles:
         new_used_entries.append(art["link"])
         new_used_entries.append(art["norm_title"])
     save_to_file(USED_NEWS_FILE, new_used_entries)
 
-    # كتابة ملف تفاصيل يوتيوب الجاهز للنسخ واللصق
     rec_title = script_data.get("recommended_title", articles[0]["title"])
     alt_titles = script_data.get("alternative_titles", [])
     desc_intro = script_data.get("youtube_description_intro", "")
