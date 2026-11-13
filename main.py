@@ -357,7 +357,7 @@ def generate_voiceover(text, out_path):
             time.sleep(2)
     raise RuntimeError(f"Failed to generate TTS audio for: {out_path}")
 
-def create_chime_wav(filepath, duration=2.4, sample_rate=44100):
+def create_chime_wav(filepath, duration=2.6, sample_rate=44100):
     n_samples = int(duration * sample_rate)
     with wave.open(filepath, 'w') as wav_file:
         wav_file.setparams((1, 2, sample_rate, n_samples, 'NONE', 'not compressed'))
@@ -403,7 +403,6 @@ def fetch_pexels_clips(queries, used_videos, clips_needed=3, prefix="scene"):
                 ]
                 if not mp4_files:
                     continue
-                # نختار المقطع الأقرب لدقة 1280x720 لتجنب تحميل ملفات 4K الضخمة جداً
                 mp4_files.sort(key=lambda vf: abs((vf.get("width") or 1280) - 1280))
                 best_file = mp4_files[0]
 
@@ -577,8 +576,10 @@ def create_chapter_bumper(story_idx, headline, category, out_path):
 def build_scene_clip(narration, banner_head, banner_sub, queries, story_idx, scene_id, used_videos):
     aud_path = f"temp_aud_{scene_id}.mp3"
     generate_voiceover(narration, aud_path)
-    audio_clip = AudioFileClip(aud_path)
-    dur = audio_clip.duration + 0.25
+    raw_audio = AudioFileClip(aud_path)
+    safe_aud_dur = max(0.2, raw_audio.duration - 0.08)
+    audio_clip = raw_audio.subclip(0, safe_aud_dur)
+    dur = safe_aud_dur + 0.25
 
     video_paths = fetch_pexels_clips(queries, used_videos, clips_needed=3, prefix=scene_id)
     sub_clips = []
@@ -609,14 +610,15 @@ def build_scene_clip(narration, banner_head, banner_sub, queries, story_idx, sce
     create_overlay_png(banner_head, banner_sub, story_idx, ov_png)
     ov_clip = ImageClip(ov_png).set_duration(dur)
 
-    final_scene = CompositeVideoClip([bg_video, ov_clip]).set_audio(audio_clip).set_duration(dur)
+    # نضبط مدة الفيديو أولاً ثم نركب الصوت الآمن حتى لا يمتد الصوت خارج حدود الملف
+    final_scene = CompositeVideoClip([bg_video, ov_clip]).set_duration(dur).set_audio(audio_clip)
     return final_scene
 
 def build_chapter_transition(story_idx, headline, category, chime_path):
     dur = 2.4
     img_path = f"temp_ch_{story_idx}.png"
     create_chapter_bumper(story_idx, headline, category, img_path)
-    aud = AudioFileClip(chime_path).set_duration(dur)
+    aud = AudioFileClip(chime_path).subclip(0, dur - 0.05)
     clip = ImageClip(img_path).set_duration(dur).set_audio(aud).fadein(0.3).fadeout(0.3)
     return clip
 
@@ -638,7 +640,7 @@ def main():
     used_videos = load_set(USED_VIDEOS_FILE)
 
     chime_path = "temp_chime.wav"
-    create_chime_wav(chime_path, duration=2.4)
+    create_chime_wav(chime_path, duration=2.6)
 
     all_clips = []
     timestamps = [("00:00", "Cold-Open Hook: Today's Top 5 Medical Breakthroughs")]
