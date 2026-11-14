@@ -1,9 +1,6 @@
-name: Generate Medical Video
+name: Daily Medical Video Generator
 
 on:
-  schedule:
-    # Starts automatically at 15:00 UTC (6:00 PM Saudi Time) so it is ready by 6:30 PM
-    - cron: '0 15 * * *'
   workflow_dispatch:
 
 permissions:
@@ -12,54 +9,49 @@ permissions:
 jobs:
   build_video:
     runs-on: ubuntu-latest
+    timeout-minutes: 90
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Set up Python 3.10
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: "3.10"
 
-      - name: Install System Media Tools (FFmpeg & Fonts)
+      - name: Install System Dependencies
         run: |
-          sudo apt-get update -y || true
-          sudo apt-get install -y --fix-missing ffmpeg fonts-dejavu-core
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg fonts-dejavu-core fonts-liberation
 
       - name: Install Python Libraries
         run: |
-          pip install --upgrade pip
+          python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run AI Agent
+      - name: Run Medical AI Agent
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
         run: |
-          python -u main.py
+          python main.py
 
-      - name: Publish Video to GitHub Releases
-        if: success()
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Save Used News and Videos History
         run: |
-          TAG_NAME="episode-$(date +'%Y-%m-%d-%H-%M')"
-          TITLE_DATE="$(date +'%Y-%m-%d %H:%M UTC')"
-          gh release create "$TAG_NAME" final_video.mp4 --title "🎬 Medical Episode ($TITLE_DATE)" --notes-file youtube_details.txt
-
-      - name: Save Memory (Prevent Repeating News & Video Clips)
-        if: success()
-        continue-on-error: true
-        run: |
-          cp used_news.txt /tmp/used_news_backup.txt || true
-          cp used_videos.txt /tmp/used_videos_backup.txt || true
-          git config --global user.name "Medical AI Agent"
-          git config --global user.email "actions@github.com"
-          git fetch origin main
-          git reset --hard origin/main
-          cp /tmp/used_news_backup.txt used_news.txt || true
-          cp /tmp/used_videos_backup.txt used_videos.txt || true
+          git config --local user.email "actions@github.com"
+          git config --local user.name "GitHub Actions"
+          touch used_news.txt used_videos.txt
           git add used_news.txt used_videos.txt
-          git diff --staged --quiet || git commit -m "Update memory: used news and video clips [skip ci]"
-          git push origin main
+          git diff --staged --quiet || git commit -m "Update used news and video clips history"
+          git push
+
+      - name: Create Release with Video and Details
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: video-${{ github.run_number }}
+          name: "MedPulse 5 Episode #${{ github.run_number }}"
+          body: "Automated HD Medical Video and YouTube Metadata"
+          files: |
+            final_video.mp4
+            youtube_details.txt
