@@ -23,7 +23,7 @@ from moviepy.editor import (
     AudioFileClip,
     CompositeVideoClip,
     CompositeAudioClip,
-     concatenate_videoclips,
+    concatenate_videoclips,
     concatenate_audioclips,
 )
 from moviepy.audio.AudioClip import AudioClip
@@ -292,6 +292,13 @@ def generate_script_with_gemini(news_items):
     profile = random.choice(pacing_profiles)
     print(f"Selected Episode Pacing Profile: {profile['target_label']} ({profile['words_per_act']} per act)")
 
+    # التنويع التلقائي بين سؤال مشوق أو عبارة/كلمات خاطفة على الصورة المصغرة
+    thumbnail_hook_styles = [
+        'a short 2-to-4 word curiosity QUESTION ending with a question mark (e.g., "CAN THIS REVERSE AGING?", "WHY DID THIS WORK?")',
+        'a bold, punchy 2-to-4 word dramatic STATEMENT or PHRASE without a question mark (e.g., "HIDDEN BRAIN TRIGGER!", "SILENT HEART WARNING", "CELLULAR REPAIR UNLOCKED")'
+    ]
+    chosen_thumb_style = random.choice(thumbnail_hook_styles)
+
     news_blob = ""
     for idx, item in enumerate(news_items, 1):
         news_blob += (
@@ -318,13 +325,14 @@ CRITICAL RULES:
 7. For EVERY act, provide 3 distinct, specific, visual Pexels search queries (3 to 5 English words each, focusing on doctors, laboratories, microscopy, brain scans, heart monitors, healthy lifestyle, DNA, cells, hospital care) so the video never shows repetitive footage.
 8. For EVERY story, provide a short, punchy `lower_third` headline (maximum 52 characters) and a `chapter_title` (maximum 42 characters).
 9. In `outro_narration`, thank the viewer for watching and invite them to subscribe to "MedPulse 5" for daily medical breakthroughs.
+10. For `thumbnail_prompt`: Write a detailed AI image generator prompt for a dramatic, ultra-realistic 16:9 medical thumbnail inspired by the most exciting story in today's episode. MUST include instructions to render {chosen_thumb_style} in LARGE BOLD GLOWING YELLOW AND WHITE CINEMATIC TEXT on the left side of the image (in ALL CAPS). It must fit today's specific breakthrough without repeating the full YouTube title.
 
 Return ONLY valid JSON matching this exact structure (no markdown fences, no extra commentary):
 {{
   "youtube_title": "Catchy high-CTR medical title (under 90 chars)",
   "youtube_description": "3-paragraph SEO description summarizing the 5 breakthroughs",
   "youtube_tags": "tag1, tag2, tag3, ... (15 tags)",
-  "thumbnail_prompt": "Detailed prompt for an AI image generator to create a dramatic, clean, text-free 16:9 medical thumbnail",
+  "thumbnail_prompt": "Ultra-realistic 16:9 cinematic medical illustration of [specific visual from today's top story], dramatic lighting, 8k resolution, with large bold glowing yellow cinematic text on the left side that says \\"YOUR 2-4 WORD HOOK HERE\\"",
   "hook_narration": "55 to 70 words captivating opening hook introducing today's 5 breakthroughs on MedPulse 5",
   "hook_queries": ["medical laboratory scientist", "human brain scan mri", "dna double helix"],
   "stories": [
@@ -522,7 +530,6 @@ def build_visual_track(clip_paths, target_duration):
                 sub = vc.subclip(start_t, start_t + seg_dur)
                 segments.append(sub)
             else:
-                # إذا كان المقطع أقصر من الجزء المطلوب، نفتح نسخة جديدة مستقلة لكل جزء
                 vc.close()
                 rem = seg_dur
                 parts = []
@@ -674,7 +681,6 @@ def build_spoken_scene(narration_text, queries, story_num, lower_third, used_vid
     audio_clip = raw_audio.subclip(0, safe_aud_dur)
     dur = safe_aud_dur + 0.20
 
-    # تحميل 3 إلى 4 مقاطع مختلفة لكل مشهد لضمان التنوع البصري وعدم التجميد
     clips_needed = 4 if dur > 26 else 3
     clip_paths = search_and_download_pexels_clips(queries, clips_needed, used_video_ids, scene_tag)
 
@@ -703,7 +709,6 @@ def main():
     script_data = generate_script_with_gemini(news_items)
 
     used_video_ids = load_set_file(USED_VIDEOS_FILE)
-    newly_used_videos = set()
     initial_known_videos = set(used_video_ids)
 
     timeline_clips = []
@@ -823,7 +828,7 @@ The content on MedPulse 5 is for informational and educational purposes only and
 ==================================================
 4. AI THUMBNAIL PROMPT (انسخ هذا الوصف وضعه في موقع الصور لتوليد صورة مصغرة للفيديو):
 ==================================================
-{script_data.get('thumbnail_prompt', 'Dramatic ultra-realistic 16:9 medical illustration showing glowing human DNA and brain synapses in a futuristic laboratory, cinematic lighting, 8k, no text, no letters')}
+{script_data.get('thumbnail_prompt', 'Dramatic ultra-realistic 16:9 medical illustration showing glowing human DNA and brain synapses in a futuristic laboratory, cinematic lighting, 8k, with large bold glowing yellow text on the left side that says "HIDDEN BODY TRIGGER!"')}
 """
     with open(YOUTUBE_DETAILS_PATH, "w", encoding="utf-8") as f:
         f.write(details_content)
