@@ -72,23 +72,47 @@ CHANNEL_LOGO_PATH = find_repo_logo()
 print(f"Detected Channel Logo: {CHANNEL_LOGO_PATH}")
 
 # ==========================================
-# 3. المصادر الطبية الموثوقة وفلترة اليوتيوب
+# 3. المصادر الطبية العالمية الكبرى ونظام التنويع والترند
 # ==========================================
 RSS_FEEDS = [
     ("MedicalXpress", "https://medicalxpress.com/rss-feed/"),
+    ("SciTechDaily Medicine", "https://scitechdaily.com/tag/medicine/feed/"),
+    ("SciTechDaily Health", "https://scitechdaily.com/tag/health/feed/"),
+    ("Drugs.com Medical News", "https://www.drugs.com/feeds/medical_news.xml"),
+    ("Drugs.com New Drugs & Trials", "https://www.drugs.com/feeds/headline_news.xml"),
+    ("MedPage Today", "https://www.medpagetoday.com/rss/headlines.xml"),
+    ("Mayo Clinic News", "https://newsnetwork.mayoclinic.org/feed/"),
     ("News-Medical", "https://www.news-medical.net/tag/feed/Medical-Research.aspx"),
-    ("EurekAlert", "https://www.eurekalert.org/rss/medicine_health.xml"),
+    ("EurekAlert Medicine", "https://www.eurekalert.org/rss/medicine_health.xml"),
     ("ScienceDaily Health", "https://www.sciencedaily.com/rss/health_medicine.xml"),
-    ("ScienceDaily Brain", "https://www.sciencedaily.com/rss/mind_brain.xml"),
-    ("ScienceDaily Longevity", "https://www.sciencedaily.com/rss/health_medicine/healthy_aging.xml"),
+    ("New Scientist Health", "https://www.newscientist.com/subject/health/feed/"),
+    ("Harvard Health", "https://www.health.harvard.edu/blog/feed"),
 ]
 
 BANNED_KEYWORDS = [
     "suicide", "self-harm", "abortion", "rape", "sexual assault", "pedophil",
-    "Porn", "erectile", "genital", "gun violence", "mass shooting", "terrorist",
+    "porn", "erectile", "genital", "gun violence", "mass shooting", "terrorist",
     "bioweapon", "biological weapon", "overdose death", "cocaine", "heroin",
     "fentanyl", "methamphetamine", "racism", "transgender", "political",
     "homicide", "murder", "autopsy", "mutilat", "execution", "euthanasia"
+]
+
+# استبعاد الأخبار الإدارية أو المملة أو التجارب على الحشرات والحيوانات غير المهمة للمشاهد
+BORING_ACADEMIC_KEYWORDS = [
+    "fruit flies", "drosophila", "zebrafish", "nematode", "c. elegans",
+    "hospital billing", "insurance coverage", "medicare policy", "nursing curriculum",
+    "medical students", "hospital staffing", "healthcare administration",
+    "telehealth survey", "veterinary", "cattle", "poultry", "swine", "crop yield"
+]
+
+# الكلمات المفتاحية التي ترفع جاذبية الخبر وتجعله ترند يهم ملايين المشاهدين
+VIRAL_BREAKTHROUGH_KEYWORDS = [
+    "breakthrough", "clinical trial", "fda", "approved", "new drug", "pill",
+    "medication", "treatment", "therapy", "reverses", "prevents", "restores",
+    "early sign", "warning sign", "hidden risk", "symptom", "first-ever",
+    "surprising", "unexpected", "millions", "common habit", "daily habit",
+    "cure", "survival", "regenerat", "repair", "eliminat", "protects against",
+    "blocks", "doubles", "cuts risk", "reduces risk", "game-changer", "vaccine"
 ]
 
 MEDICAL_PRIORITY_KEYWORDS = [
@@ -98,8 +122,45 @@ MEDICAL_PRIORITY_KEYWORDS = [
     "immune", "vaccine", "antibiotic", "virus", "infection", "stem cell",
     "gene", "dna", "rna", "crispr", "drug", "fda", "medication", "blood",
     "kidney", "liver", "lung", "sleep", "depression", "anxiety", "stroke",
-    "microbiome", "gut", "inflammation", "arthritis", "vision", "hearing"
+    "microbiome", "gut", "inflammation", "arthritis", "vision", "hearing",
+    "stomach", "pancreas", "thyroid", "bone", "muscle", "skin", "migraine",
+    "cholesterol", "blood pressure", "asthma", "allergy", "vitamin"
 ]
+
+# تقسيم الطب إلى 6 مجالات مستقلة لضمان تنوع كل فيديو وعدم التركيز على عضو واحد
+MEDICAL_DOMAINS = {
+    "pharma_drugs": [
+        "drug", "pill", "medication", "fda", "approval", "approved", "pharmaceutical",
+        "prescription", "antibiotic", "vaccine", "injection", "dose", "statin",
+        "glp-1", "ozempic", "inhibitor", "capsule", "tablet", "clinical trial"
+    ],
+    "internal_organs": [
+        "liver", "kidney", "renal", "hepatic", "lung", "pulmonary", "respiratory",
+        "asthma", "gut", "microbiome", "stomach", "gastric", "intestin", "colon",
+        "bowel", "pancreas", "gallbladder", "thyroid", "bladder", "digestive"
+    ],
+    "major_diseases_immunity": [
+        "cancer", "tumor", "oncology", "leukemia", "melanoma", "chemotherapy",
+        "diabetes", "insulin", "glucose", "blood sugar", "autoimmune", "immune system",
+        "immunity", "virus", "viral", "infection", "bacteria", "sepsis", "arthritis", "lupus"
+    ],
+    "senses_bones_sleep_skin": [
+        "eye", "vision", "blind", "retina", "glaucoma", "macular", "hearing",
+        "ear", "deaf", "tinnitus", "bone", "osteoporosis", "muscle", "joint",
+        "cartilage", "skin", "eczema", "psoriasis", "hair", "sleep", "insomnia",
+        "apnea", "migraine", "chronic pain", "dental", "tooth", "gum"
+    ],
+    "metabolism_nutrition_aging": [
+        "obesity", "weight loss", "fat", "metabolism", "metabolic", "cholesterol",
+        "triglyceride", "diet", "nutrition", "vitamin", "supplement", "protein",
+        "fasting", "exercise", "longevity", "aging", "cellular", "lifespan"
+    ],
+    "heart_and_brain": [
+        "brain", "alzheimer", "dementia", "parkinson", "memory", "cognitive",
+        "neuro", "stroke", "heart", "cardiac", "cardiovascular", "artery",
+        "blood pressure", "hypertension", "vascular"
+    ]
+}
 
 FALLBACK_QUERIES = [
     "medical scientist microscope laboratory",
@@ -148,16 +209,64 @@ def clean_html(raw_html):
     text = re.sub(r"\s+", " ", text).strip()
     return text
 
-def is_safe_and_medical(title, summary):
+def is_safe_and_engaging_medical(title, summary):
     combined = (title + " " + summary).lower()
     for bad in BANNED_KEYWORDS:
         if bad.lower() in combined:
             return False
-    score = 0
-    for kw in MEDICAL_PRIORITY_KEYWORDS:
-        if kw in combined:
-            score += 1
+    for boring in BORING_ACADEMIC_KEYWORDS:
+        if boring.lower() in combined:
+            return False
+    score = sum(1 for kw in MEDICAL_PRIORITY_KEYWORDS if kw in combined)
     return score >= 1
+
+def classify_medical_domain(title, summary):
+    """يحدد المجال الطبي للخبر لضمان تنوع أخبار الحلقة بين الأدوية والأعضاء والأمراض."""
+    combined = (title + " " + summary).lower()
+    title_low = title.lower()
+    best_domain = "general_medicine"
+    best_hits = 0
+
+    # نعطي أولوية للأقسام غير الدماغ والقلب أولاً إذا تساوت النقاط لضمان التنوع
+    domain_order = [
+        "pharma_drugs",
+        "internal_organs",
+        "major_diseases_immunity",
+        "senses_bones_sleep_skin",
+        "metabolism_nutrition_aging",
+        "heart_and_brain"
+    ]
+    for dom in domain_order:
+        kws = MEDICAL_DOMAINS[dom]
+        # الكلمة الموجودة في العنوان تحسب بنقطتين، وفي الملخص بنقطة واحدة
+        hits = sum(2 if kw in title_low else (1 if kw in combined else 0) for kw in kws)
+        if hits > best_hits:
+            best_hits = hits
+            best_domain = dom
+    return best_domain
+
+def calculate_viral_and_freshness_rank(title, summary, dt):
+    """يحسب قوة الخبر وإثارته للجمهور مع مراعاة حداثته."""
+    now = datetime.datetime.now(datetime.timezone.utc)
+    hours_old = max(0.0, (now - dt).total_seconds() / 3600.0)
+
+    # مكافأة الحداثة (أخبار آخر 24 إلى 48 ساعة تأخذ الأولوية القصوى)
+    if hours_old <= 24:
+        freshness_pts = 14
+    elif hours_old <= 48:
+        freshness_pts = 10
+    elif hours_old <= 72:
+        freshness_pts = 6
+    else:
+        freshness_pts = 2
+
+    combined = (title + " " + summary).lower()
+    title_low = title.lower()
+
+    med_pts = sum(1 for kw in MEDICAL_PRIORITY_KEYWORDS if kw in combined)
+    viral_pts = sum(3 if kw in title_low else (2 if kw in combined else 0) for kw in VIRAL_BREAKTHROUGH_KEYWORDS)
+
+    return freshness_pts + med_pts + viral_pts
 
 def parse_rss_date(date_str):
     now = datetime.datetime.now(datetime.timezone.utc)
@@ -194,44 +303,74 @@ def fetch_top_5_medical_news():
                     continue
                 if link in used_links:
                     continue
-                if not is_safe_and_medical(title, desc):
+                if not is_safe_and_engaging_medical(title, desc):
                     continue
 
                 dt = parse_rss_date(pub_date_raw)
-                combined = (title + " " + desc).lower()
-                priority_score = sum(1 for kw in MEDICAL_PRIORITY_KEYWORDS if kw in combined)
+                domain = classify_medical_domain(title, desc)
+                total_rank = calculate_viral_and_freshness_rank(title, desc, dt)
 
                 candidates.append({
                     "source": source_name,
                     "title": title,
                     "link": link,
-                    "summary": desc[:800],
+                    "summary": desc[:850],
                     "datetime": dt,
                     "date_str": dt.strftime("%B %d, %Y"),
-                    "score": priority_score
+                    "domain": domain,
+                    "score": total_rank
                 })
         except Exception as e:
             print(f"RSS warning for {source_name}: {e}")
 
-    candidates.sort(key=lambda x: (x["datetime"], x["score"]), reverse=True)
+    # ترتيب جميع الأخبار حسب مجموع نقاط الترند والإثارة والحداثة
+    candidates.sort(key=lambda x: (x["score"], x["datetime"]), reverse=True)
 
     selected = []
     seen_titles = set()
     source_counts = {}
+    domain_counts = {}
 
+    # المرحلة الأولى: اختيار أقوى خبر ترند من كل مجال طبي مختلف (منع تكرار نفس العضو أو المجال)
     for item in candidates:
         norm_title = re.sub(r"[^a-z0-9]", "", item["title"].lower())[:45]
         if norm_title in seen_titles:
             continue
         src = item["source"]
-        if source_counts.get(src, 0) >= 2 and len(candidates) > 10:
+        dom = item["domain"]
+
+        # لا نسمح بأكثر من خبر واحد من نفس المجال الطبي في الجولة الأولى (خصوصاً القلب والدماغ)
+        if domain_counts.get(dom, 0) >= 1:
+            continue
+        if source_counts.get(src, 0) >= 2 and len(candidates) > 12:
             continue
 
         selected.append(item)
         seen_titles.add(norm_title)
         source_counts[src] = source_counts.get(src, 0) + 1
+        domain_counts[dom] = domain_counts.get(dom, 0) + 1
         if len(selected) == 5:
             break
+
+    # المرحلة الثانية (احتياطية): إكمال العدد إلى 5 مع استمرار منع طغيان القلب والدماغ
+    if len(selected) < 5:
+        for item in candidates:
+            if item in selected:
+                continue
+            norm_title = re.sub(r"[^a-z0-9]", "", item["title"].lower())[:45]
+            if norm_title in seen_titles:
+                continue
+            dom = item["domain"]
+            if dom == "heart_and_brain" and domain_counts.get(dom, 0) >= 1 and len(candidates) > 10:
+                continue
+            if domain_counts.get(dom, 0) >= 2 and len(candidates) > 10:
+                continue
+
+            selected.append(item)
+            seen_titles.add(norm_title)
+            domain_counts[dom] = domain_counts.get(dom, 0) + 1
+            if len(selected) == 5:
+                break
 
     if len(selected) < 5:
         for item in candidates:
@@ -295,14 +434,14 @@ def generate_script_with_gemini(news_items):
     # التنويع التلقائي بين سؤال مشوق أو عبارة/كلمات خاطفة على الصورة المصغرة
     thumbnail_hook_styles = [
         'a short 2-to-4 word curiosity QUESTION ending with a question mark (e.g., "CAN THIS REVERSE AGING?", "WHY DID THIS WORK?")',
-        'a bold, punchy 2-to-4 word dramatic STATEMENT or PHRASE without a question mark (e.g., "HIDDEN BRAIN TRIGGER!", "SILENT HEART WARNING", "CELLULAR REPAIR UNLOCKED")'
+        'a bold, punchy 2-to-4 word dramatic STATEMENT or PHRASE without a question mark (e.g., "HIDDEN ORGAN TRIGGER!", "NEW PILL BREAKTHROUGH", "CELLULAR REPAIR UNLOCKED")'
     ]
     chosen_thumb_style = random.choice(thumbnail_hook_styles)
 
     news_blob = ""
     for idx, item in enumerate(news_items, 1):
         news_blob += (
-            f"STORY {idx}:\n"
+            f"STORY {idx} (Category: {item.get('domain', 'medicine')}):\n"
             f"Title: {item['title']}\n"
             f"Summary: {item['summary']}\n\n"
         )
@@ -317,12 +456,12 @@ INPUT STORIES:
 
 CRITICAL RULES:
 1. Speak directly to the viewer ("you", "your body", "your health").
-2. NEVER say website names (like MedicalXpress, ScienceDaily, EurekAlert) or publication dates out loud in the spoken narration!
-3. Instead, attribute findings naturally to "researchers", "clinical investigators", "neuroscientists", or the university/institute mentioned in the summary.
+2. NEVER say website names (like MedicalXpress, ScienceDaily, EurekAlert, MedPage, SciTechDaily) or publication dates out loud in the spoken narration!
+3. Instead, attribute findings naturally to "researchers", "clinical investigators", "medical scientists", or the university/hospital mentioned in the summary.
 4. Keep all language 100% YouTube Advertiser-Friendly. Avoid graphic descriptions of violence or disturbing imagery.
 5. Each of the 5 stories MUST be divided into exactly 4 narrative acts (Act 1: The Hidden Medical Challenge, Act 2: The Discovery & Mechanism, Act 3: Clinical Evidence & Impact, Act 4: What This Means For Your Health).
 6. LENGTH REQUIREMENT: Each of the 20 acts (5 stories x 4 acts) MUST contain {profile['words_per_act']} of natural spoken narration.
-7. For EVERY act, provide 3 distinct, specific, visual Pexels search queries (3 to 5 English words each, focusing on doctors, laboratories, microscopy, brain scans, heart monitors, healthy lifestyle, DNA, cells, hospital care) so the video never shows repetitive footage.
+7. For EVERY act, provide 3 distinct, specific, visual Pexels search queries (3 to 5 English words each, matching the exact organ, medication, disease, or laboratory process in that story) so the video never shows repetitive footage.
 8. For EVERY story, provide a short, punchy `lower_third` headline (maximum 52 characters) and a `chapter_title` (maximum 42 characters).
 9. In `outro_narration`, thank the viewer for watching and invite them to subscribe to "MedPulse 5" for daily medical breakthroughs.
 10. For `thumbnail_prompt`: Write a detailed AI image generator prompt for a dramatic, ultra-realistic 16:9 medical thumbnail inspired by the most exciting story in today's episode. MUST include instructions to render {chosen_thumb_style} in LARGE BOLD GLOWING YELLOW AND WHITE CINEMATIC TEXT on the left side of the image (in ALL CAPS). It must fit today's specific breakthrough without repeating the full YouTube title.
@@ -334,7 +473,7 @@ Return ONLY valid JSON matching this exact structure (no markdown fences, no ext
   "youtube_tags": "tag1, tag2, tag3, ... (15 tags)",
   "thumbnail_prompt": "Ultra-realistic 16:9 cinematic medical illustration of [specific visual from today's top story], dramatic lighting, 8k resolution, with large bold glowing yellow cinematic text on the left side that says \\"YOUR 2-4 WORD HOOK HERE\\"",
   "hook_narration": "55 to 70 words captivating opening hook introducing today's 5 breakthroughs on MedPulse 5",
-  "hook_queries": ["medical laboratory scientist", "human brain scan mri", "dna double helix"],
+  "hook_queries": ["medical laboratory scientist", "pharmacist medicine pills", "dna double helix"],
   "stories": [
     {{
       "story_number": 1,
@@ -700,10 +839,10 @@ def format_timestamp(seconds):
     return f"{m:02d}:{s:02d}"
 
 def main():
-    print("1. Fetching top 5 fresh medical news stories...")
+    print("1. Fetching top 5 fresh, diverse, high-impact medical news stories...")
     news_items = fetch_top_5_medical_news()
     for i, it in enumerate(news_items, 1):
-        print(f"  Story {i}: {it['title']} ({it['source']})")
+        print(f"  Story {i} [{it.get('domain')}]: {it['title']} ({it['source']} - Score: {it.get('score')})")
 
     print("2. Generating dynamic documentary script via Gemini...")
     script_data = generate_script_with_gemini(news_items)
@@ -828,7 +967,7 @@ The content on MedPulse 5 is for informational and educational purposes only and
 ==================================================
 4. AI THUMBNAIL PROMPT (انسخ هذا الوصف وضعه في موقع الصور لتوليد صورة مصغرة للفيديو):
 ==================================================
-{script_data.get('thumbnail_prompt', 'Dramatic ultra-realistic 16:9 medical illustration showing glowing human DNA and brain synapses in a futuristic laboratory, cinematic lighting, 8k, with large bold glowing yellow text on the left side that says "HIDDEN BODY TRIGGER!"')}
+{script_data.get('thumbnail_prompt', 'Dramatic ultra-realistic 16:9 medical illustration showing glowing human DNA and medical capsules in a futuristic laboratory, cinematic lighting, 8k, with large bold glowing yellow text on the left side that says "HIDDEN BODY TRIGGER!"')}
 """
     with open(YOUTUBE_DETAILS_PATH, "w", encoding="utf-8") as f:
         f.write(details_content)
