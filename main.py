@@ -227,7 +227,6 @@ def classify_medical_domain(title, summary):
     best_domain = "general_medicine"
     best_hits = 0
 
-    # نعطي أولوية للأقسام غير الدماغ والقلب أولاً إذا تساوت النقاط لضمان التنوع
     domain_order = [
         "pharma_drugs",
         "internal_organs",
@@ -238,7 +237,6 @@ def classify_medical_domain(title, summary):
     ]
     for dom in domain_order:
         kws = MEDICAL_DOMAINS[dom]
-        # الكلمة الموجودة في العنوان تحسب بنقطتين، وفي الملخص بنقطة واحدة
         hits = sum(2 if kw in title_low else (1 if kw in combined else 0) for kw in kws)
         if hits > best_hits:
             best_hits = hits
@@ -250,7 +248,6 @@ def calculate_viral_and_freshness_rank(title, summary, dt):
     now = datetime.datetime.now(datetime.timezone.utc)
     hours_old = max(0.0, (now - dt).total_seconds() / 3600.0)
 
-    # مكافأة الحداثة (أخبار آخر 24 إلى 48 ساعة تأخذ الأولوية القصوى)
     if hours_old <= 24:
         freshness_pts = 14
     elif hours_old <= 48:
@@ -323,7 +320,6 @@ def fetch_top_5_medical_news():
         except Exception as e:
             print(f"RSS warning for {source_name}: {e}")
 
-    # ترتيب جميع الأخبار حسب مجموع نقاط الترند والإثارة والحداثة
     candidates.sort(key=lambda x: (x["score"], x["datetime"]), reverse=True)
 
     selected = []
@@ -331,7 +327,6 @@ def fetch_top_5_medical_news():
     source_counts = {}
     domain_counts = {}
 
-    # المرحلة الأولى: اختيار أقوى خبر ترند من كل مجال طبي مختلف (منع تكرار نفس العضو أو المجال)
     for item in candidates:
         norm_title = re.sub(r"[^a-z0-9]", "", item["title"].lower())[:45]
         if norm_title in seen_titles:
@@ -339,7 +334,6 @@ def fetch_top_5_medical_news():
         src = item["source"]
         dom = item["domain"]
 
-        # لا نسمح بأكثر من خبر واحد من نفس المجال الطبي في الجولة الأولى (خصوصاً القلب والدماغ)
         if domain_counts.get(dom, 0) >= 1:
             continue
         if source_counts.get(src, 0) >= 2 and len(candidates) > 12:
@@ -352,7 +346,6 @@ def fetch_top_5_medical_news():
         if len(selected) == 5:
             break
 
-    # المرحلة الثانية (احتياطية): إكمال العدد إلى 5 مع استمرار منع طغيان القلب والدماغ
     if len(selected) < 5:
         for item in candidates:
             if item in selected:
@@ -433,10 +426,31 @@ def generate_script_with_gemini(news_items):
 
     # التنويع التلقائي بين سؤال مشوق أو عبارة/كلمات خاطفة على الصورة المصغرة
     thumbnail_hook_styles = [
-        'a short 2-to-4 word curiosity QUESTION ending with a question mark (e.g., "CAN THIS REVERSE AGING?", "WHY DID THIS WORK?")',
+        'a short 2-to-4 word curiosity QUESTION ending with a question mark (e.g., "IS THIS THE CURE?", "WHY DID THIS WORK?")',
         'a bold, punchy 2-to-4 word dramatic STATEMENT or PHRASE without a question mark (e.g., "HIDDEN ORGAN TRIGGER!", "NEW PILL BREAKTHROUGH", "CELLULAR REPAIR UNLOCKED")'
     ]
     chosen_thumb_style = random.choice(thumbnail_hook_styles)
+
+    # اختيار خبر غير متعلق بالمخ ليكون هو محور الصورة المصغرة مع تنويع الألوان السينمائية
+    non_brain_candidates = [
+        (idx, it) for idx, it in enumerate(news_items, 1)
+        if "brain" not in (it["title"] + " " + it["summary"]).lower()
+        and "alzheimer" not in (it["title"] + " " + it["summary"]).lower()
+        and "dementia" not in (it["title"] + " " + it["summary"]).lower()
+    ]
+    if non_brain_candidates:
+        thumb_story_idx, thumb_story_item = random.choice(non_brain_candidates)
+    else:
+        thumb_story_idx, thumb_story_item = 1, news_items[0]
+
+    color_palettes = [
+        "vibrant emerald green, gold, and deep clinical navy",
+        "crimson red, warm amber gold, and dark cinematic teal",
+        "glowing magenta, royal purple, and bright silver-white",
+        "radiant golden-orange, electric cyan, and deep obsidian",
+        "ruby red, bright turquoise, and clean laboratory white"
+    ]
+    chosen_palette = random.choice(color_palettes)
 
     news_blob = ""
     for idx, item in enumerate(news_items, 1):
@@ -464,16 +478,25 @@ CRITICAL RULES:
 7. For EVERY act, provide 3 distinct, specific, visual Pexels search queries (3 to 5 English words each, matching the exact organ, medication, disease, or laboratory process in that story) so the video never shows repetitive footage.
 8. For EVERY story, provide a short, punchy `lower_third` headline (maximum 52 characters) and a `chapter_title` (maximum 42 characters).
 9. In `outro_narration`, thank the viewer for watching and invite them to subscribe to "MedPulse 5" for daily medical breakthroughs.
-10. For `thumbnail_prompt`: Write a detailed AI image generator prompt for a dramatic, ultra-realistic 16:9 medical thumbnail inspired by the most exciting story in today's episode. MUST include instructions to render {chosen_thumb_style} in LARGE BOLD GLOWING YELLOW AND WHITE CINEMATIC TEXT on the left side of the image (in ALL CAPS). It must fit today's specific breakthrough without repeating the full YouTube title.
+10. Provide 3 distinct, high-CTR `youtube_titles` (under 90 chars each). Title #1 MUST be the strongest, most clickable recommended title.
+11. For `thumbnail_prompt`: Base the visual strictly on STORY #{thumb_story_idx} ("{thumb_story_item['title']}").
+    - STRICTLY FORBIDDEN: Do NOT draw a human brain, head silhouette, or neural synapses!
+    - Instead, depict the specific subject of Story #{thumb_story_idx} (such as a glowing translucent medical capsule/pill, heart & arteries, liver/kidney/lungs/gut, microscopic immune cells fighting disease, vaccine vial, or a doctor examining a futuristic diagnostic display).
+    - Use a rich, eye-catching color palette featuring {chosen_palette}.
+    - MUST include instructions to render {chosen_thumb_style} in LARGE BOLD GLOWING YELLOW AND WHITE CINEMATIC TEXT on the left side of the image (in ALL CAPS).
 
 Return ONLY valid JSON matching this exact structure (no markdown fences, no extra commentary):
 {{
-  "youtube_title": "Catchy high-CTR medical title (under 90 chars)",
+  "youtube_titles": [
+    "Title Option 1 (The #1 Best High-CTR Recommended Title)",
+    "Title Option 2 (Curiosity & Health Impact Angle)",
+    "Title Option 3 (Direct Clinical Breakthrough Angle)"
+  ],
   "youtube_description": "3-paragraph SEO description summarizing the 5 breakthroughs",
   "youtube_tags": "tag1, tag2, tag3, ... (15 tags)",
-  "thumbnail_prompt": "Ultra-realistic 16:9 cinematic medical illustration of [specific visual from today's top story], dramatic lighting, 8k resolution, with large bold glowing yellow cinematic text on the left side that says \\"YOUR 2-4 WORD HOOK HERE\\"",
+  "thumbnail_prompt": "Ultra-realistic 16:9 cinematic medical illustration of [specific non-brain visual from Story #{thumb_story_idx}], rich color palette of {chosen_palette}, dramatic lighting, 8k resolution, with large bold glowing yellow and white cinematic text on the left side that says \\"YOUR 2-4 WORD HOOK HERE\\"",
   "hook_narration": "55 to 70 words captivating opening hook introducing today's 5 breakthroughs on MedPulse 5",
-  "hook_queries": ["medical laboratory scientist", "pharmacist medicine pills", "dna double helix"],
+  "hook_queries": ["medical laboratory scientist", "pharmacist medicine pills", "red blood cells artery"],
   "stories": [
     {{
       "story_number": 1,
@@ -607,7 +630,6 @@ def search_and_download_pexels_clips(queries, count_needed, used_video_ids, pref
                     continue
 
                 v_files = v.get("video_files", [])
-                # اختيار ملفات HD الحقيقية فقط (بين 1280 و 2560 عرضاً، وارتفاع 720 على الأقل)
                 hd_files = [
                     vf for vf in v_files
                     if vf.get("file_type") == "video/mp4"
@@ -617,7 +639,6 @@ def search_and_download_pexels_clips(queries, count_needed, used_video_ids, pref
                 if not hd_files:
                     continue
 
-                # تفضيل 1920x1080 أو 1280x720 الأعلى جودة
                 hd_files.sort(key=lambda x: (x.get("width") or 0), reverse=True)
                 chosen_file = hd_files[0]
                 dl_link = chosen_file.get("link")
@@ -934,14 +955,32 @@ def main():
     if new_vids:
         append_set_file(USED_VIDEOS_FILE, list(new_vids))
 
+    # تجهيز خيارات العناوين الثلاثة مع علامة (موصى به)
+    titles_list = script_data.get("youtube_titles", [])
+    if not isinstance(titles_list, list) or len(titles_list) == 0:
+        single_t = script_data.get("youtube_title", "Top 5 Medical Breakthroughs Changing Healthcare Today")
+        titles_list = [
+            single_t,
+            "5 Surprising Medical Discoveries & Treatments You Need to Know",
+            "New Clinical Breakthroughs: Medications, Organs & Disease Prevention"
+        ]
+    while len(titles_list) < 3:
+        titles_list.append(titles_list[0])
+
+    titles_block = (
+        f"الخيار 1 (موصى به):\n{titles_list[0]}\n\n"
+        f"الخيار 2:\n{titles_list[1]}\n\n"
+        f"الخيار 3:\n{titles_list[2]}"
+    )
+
     # إعداد ملف تفاصيل اليوتيوب الجاهز للنسخ واللصق
     ts_block = "\n".join([f"{t} - {label}" for t, label in timestamps])
     src_block = "\n".join([f"{i}. {it['title']} ({it['source']}):\n{it['link']}" for i, it in enumerate(news_items, 1)])
 
     details_content = f"""==================================================
-1. YOUTUBE TITLE (انسخ هذا العنوان وضعه في خانة عنوان الفيديو):
+1. YOUTUBE TITLES (اختر عنواناً واحداً فقط من العناوين الثلاثة التالية وضعه في خانة العنوان):
 ==================================================
-{script_data.get('youtube_title', 'Top 5 Medical Breakthroughs You Need to Know Today')}
+{titles_block}
 
 ==================================================
 2. YOUTUBE DESCRIPTION (انسخ هذا الوصف بالكامل وضعه في خانة الوصف):
@@ -965,9 +1004,9 @@ The content on MedPulse 5 is for informational and educational purposes only and
 {script_data.get('youtube_tags', 'medical breakthroughs, health news, medicine, longevity, clinical trials, MedPulse 5')}
 
 ==================================================
-4. AI THUMBNAIL PROMPT (انسخ هذا الوصف وضعه في موقع الصور لتوليد صورة مصغرة للفيديو):
+4. AI THUMBNAIL PROMPT (انسخ هذا الوصف وضعه في موقع الصور لتوليد صورة مصغرة متنوعة للفيديو):
 ==================================================
-{script_data.get('thumbnail_prompt', 'Dramatic ultra-realistic 16:9 medical illustration showing glowing human DNA and medical capsules in a futuristic laboratory, cinematic lighting, 8k, with large bold glowing yellow text on the left side that says "HIDDEN BODY TRIGGER!"')}
+{script_data.get('thumbnail_prompt', 'Dramatic ultra-realistic 16:9 medical illustration showing a glowing translucent pharmaceutical capsule releasing golden healing particles inside the bloodstream, emerald and crimson cinematic lighting, 8k, with large bold glowing yellow text on the left side that says "NEW PILL BREAKTHROUGH!"')}
 """
     with open(YOUTUBE_DETAILS_PATH, "w", encoding="utf-8") as f:
         f.write(details_content)
