@@ -72,21 +72,21 @@ CHANNEL_LOGO_PATH = find_repo_logo()
 print(f"Detected Channel Logo: {CHANNEL_LOGO_PATH}")
 
 # ==========================================
-# 3. المصادر الطبية العالمية الكبرى ونظام التنويع والترند
+# 3. المصادر الطبية العالمية (أدوية، أمراض مستعصية، فيتامينات وصحة الجسم)
 # ==========================================
 RSS_FEEDS = [
-    ("MedicalXpress", "https://medicalxpress.com/rss-feed/"),
+    ("Drugs.com New Medications", "https://www.drugs.com/feeds/medical_news.xml"),
+    ("Drugs.com Clinical Headlines", "https://www.drugs.com/feeds/headline_news.xml"),
+    ("Mayo Clinic Health", "https://newsnetwork.mayoclinic.org/feed/"),
+    ("Harvard Health", "https://www.health.harvard.edu/blog/feed"),
+    ("MedPage Today", "https://www.medpagetoday.com/rss/headlines.xml"),
     ("SciTechDaily Medicine", "https://scitechdaily.com/tag/medicine/feed/"),
     ("SciTechDaily Health", "https://scitechdaily.com/tag/health/feed/"),
-    ("Drugs.com Medical News", "https://www.drugs.com/feeds/medical_news.xml"),
-    ("Drugs.com New Drugs & Trials", "https://www.drugs.com/feeds/headline_news.xml"),
-    ("MedPage Today", "https://www.medpagetoday.com/rss/headlines.xml"),
-    ("Mayo Clinic News", "https://newsnetwork.mayoclinic.org/feed/"),
+    ("MedicalXpress", "https://medicalxpress.com/rss-feed/"),
     ("News-Medical", "https://www.news-medical.net/tag/feed/Medical-Research.aspx"),
-    ("EurekAlert Medicine", "https://www.eurekalert.org/rss/medicine_health.xml"),
     ("ScienceDaily Health", "https://www.sciencedaily.com/rss/health_medicine.xml"),
-    ("New Scientist Health", "https://www.newscientist.com/subject/health/feed/"),
-    ("Harvard Health", "https://www.health.harvard.edu/blog/feed"),
+    ("ScienceDaily Nutrition & Vitamins", "https://www.sciencedaily.com/rss/health_medicine/nutrition.xml"),
+    ("EurekAlert Medicine", "https://www.eurekalert.org/rss/medicine_health.xml"),
 ]
 
 BANNED_KEYWORDS = [
@@ -97,97 +97,95 @@ BANNED_KEYWORDS = [
     "homicide", "murder", "autopsy", "mutilat", "execution", "euthanasia"
 ]
 
-# استبعاد الأخبار الإدارية أو المملة أو التجارب على الحشرات والحيوانات غير المهمة للمشاهد
-BORING_ACADEMIC_KEYWORDS = [
-    "fruit flies", "drosophila", "zebrafish", "nematode", "c. elegans",
+# حظر أبحاث الأحياء النظرية المملة والتجارب غير البشرية والتقارير الإدارية
+BORING_LECTURE_KEYWORDS = [
+    "fruit flies", "drosophila", "zebrafish", "nematode", "c. elegans", "yeast",
+    "protein folding", "ribosome", "transcriptome", "organelle", "chromatin",
+    "phylogenetic", "evolutionary", "paleontol", "archaeolog", "botany", "plant cell",
     "hospital billing", "insurance coverage", "medicare policy", "nursing curriculum",
     "medical students", "hospital staffing", "healthcare administration",
-    "telehealth survey", "veterinary", "cattle", "poultry", "swine", "crop yield"
+    "telehealth survey", "veterinary", "cattle", "poultry", "swine", "crop yield",
+    "biophysics", "cryo-em", "x-ray crystallography", "in silico", "computational model"
 ]
 
-# الكلمات المفتاحية التي ترفع جاذبية الخبر وتجعله ترند يهم ملايين المشاهدين
-VIRAL_BREAKTHROUGH_KEYWORDS = [
-    "breakthrough", "clinical trial", "fda", "approved", "new drug", "pill",
-    "medication", "treatment", "therapy", "reverses", "prevents", "restores",
-    "early sign", "warning sign", "hidden risk", "symptom", "first-ever",
-    "surprising", "unexpected", "millions", "common habit", "daily habit",
-    "cure", "survival", "regenerat", "repair", "eliminat", "protects against",
-    "blocks", "doubles", "cuts risk", "reduces risk", "game-changer", "vaccine"
+# كلمات الإثارة التي تهم المشاهد العادي (علاجات، أدوية جديدة، فيتامينات، شفاء أمراض مستعصية)
+VIRAL_HUMAN_HEALTH_KEYWORDS = [
+    "new drug", "pill", "medication", "fda", "approved", "cure", "treatment",
+    "therapy", "clinical trial", "reverses", "restores", "heals", "eliminates",
+    "vitamin", "supplement", "nutrient", "magnesium", "omega-3", "vitamin d",
+    "vitamin b12", "iron", "zinc", "antioxidant", "probiotic", "diet", "fasting",
+    "early sign", "warning sign", "symptom", "body", "organ", "chronic",
+    "stubborn", "incurable", "deadly", "survival", "pain relief", "blocks",
+    "cuts risk", "reduces risk", "prevents", "breakthrough", "game-changer"
 ]
 
 MEDICAL_PRIORITY_KEYWORDS = [
     "treatment", "therapy", "clinical trial", "breakthrough", "cancer", "tumor",
-    "alzheimer", "dementia", "parkinson", "brain", "heart", "cardiovascular",
-    "diabetes", "insulin", "obesity", "metabolism", "longevity", "aging",
-    "immune", "vaccine", "antibiotic", "virus", "infection", "stem cell",
-    "gene", "dna", "rna", "crispr", "drug", "fda", "medication", "blood",
-    "kidney", "liver", "lung", "sleep", "depression", "anxiety", "stroke",
-    "microbiome", "gut", "inflammation", "arthritis", "vision", "hearing",
-    "stomach", "pancreas", "thyroid", "bone", "muscle", "skin", "migraine",
-    "cholesterol", "blood pressure", "asthma", "allergy", "vitamin"
+    "diabetes", "insulin", "blood sugar", "obesity", "weight loss", "metabolism",
+    "liver", "kidney", "lung", "stomach", "gut", "colon", "pancreas", "thyroid",
+    "heart", "cardiovascular", "artery", "blood pressure", "cholesterol", "stroke",
+    "arthritis", "joint pain", "bone", "muscle", "autoimmune", "lupus", "fibromyalgia",
+    "vitamin", "supplement", "nutrient", "deficiency", "drug", "pill", "medication",
+    "fda", "antibiotic", "vaccine", "immune", "inflammation", "vision", "eye",
+    "hearing", "sleep", "insomnia", "migraine", "skin", "alzheimer", "parkinson"
 ]
 
-# تقسيم الطب إلى 6 مجالات مستقلة لضمان تنوع كل فيديو وعدم التركيز على عضو واحد
+# تقسيم الأخبار إلى 5 مجالات عملية مثيرة تمنع الملل وتركز على الأدوية والأمراض والفيتامينات
 MEDICAL_DOMAINS = {
-    "pharma_drugs": [
-        "drug", "pill", "medication", "fda", "approval", "approved", "pharmaceutical",
-        "prescription", "antibiotic", "vaccine", "injection", "dose", "statin",
-        "glp-1", "ozempic", "inhibitor", "capsule", "tablet", "clinical trial"
+    "new_drugs_and_pills": [
+        "drug", "pill", "medication", "fda", "approved", "approval", "capsule",
+        "tablet", "injection", "pharmaceutical", "prescription", "antibiotic",
+        "vaccine", "glp-1", "statin", "painkiller", "inhibitor", "dose"
     ],
-    "internal_organs": [
-        "liver", "kidney", "renal", "hepatic", "lung", "pulmonary", "respiratory",
-        "asthma", "gut", "microbiome", "stomach", "gastric", "intestin", "colon",
-        "bowel", "pancreas", "gallbladder", "thyroid", "bladder", "digestive"
+    "vitamins_nutrition_and_body": [
+        "vitamin", "supplement", "magnesium", "omega-3", "zinc", "iron", "calcium",
+        "potassium", "probiotic", "prebiotic", "antioxidant", "nutrient", "deficiency",
+        "diet", "nutrition", "fasting", "protein", "fiber", "hydration", "metabolism",
+        "weight loss", "fat burning", "obesity", "longevity", "anti-aging"
     ],
-    "major_diseases_immunity": [
-        "cancer", "tumor", "oncology", "leukemia", "melanoma", "chemotherapy",
-        "diabetes", "insulin", "glucose", "blood sugar", "autoimmune", "immune system",
-        "immunity", "virus", "viral", "infection", "bacteria", "sepsis", "arthritis", "lupus"
+    "stubborn_chronic_diseases": [
+        "cancer", "tumor", "leukemia", "chemotherapy", "diabetes", "insulin",
+        "blood sugar", "autoimmune", "arthritis", "rheumatoid", "lupus", "multiple sclerosis",
+        "fibromyalgia", "chronic pain", "migraine", "asthma", "allergy", "psoriasis"
     ],
-    "senses_bones_sleep_skin": [
-        "eye", "vision", "blind", "retina", "glaucoma", "macular", "hearing",
-        "ear", "deaf", "tinnitus", "bone", "osteoporosis", "muscle", "joint",
-        "cartilage", "skin", "eczema", "psoriasis", "hair", "sleep", "insomnia",
-        "apnea", "migraine", "chronic pain", "dental", "tooth", "gum"
+    "vital_internal_organs": [
+        "liver", "fatty liver", "kidney", "renal", "lung", "respiratory", "stomach",
+        "ulcer", "gut", "microbiome", "intestin", "colon", "bowel", "pancreas",
+        "gallbladder", "thyroid", "bladder", "digestion", "eye", "vision", "retina", "hearing"
     ],
-    "metabolism_nutrition_aging": [
-        "obesity", "weight loss", "fat", "metabolism", "metabolic", "cholesterol",
-        "triglyceride", "diet", "nutrition", "vitamin", "supplement", "protein",
-        "fasting", "exercise", "longevity", "aging", "cellular", "lifespan"
-    ],
-    "heart_and_brain": [
-        "brain", "alzheimer", "dementia", "parkinson", "memory", "cognitive",
-        "neuro", "stroke", "heart", "cardiac", "cardiovascular", "artery",
-        "blood pressure", "hypertension", "vascular"
+    "heart_blood_and_nerves": [
+        "heart", "cardiac", "cardiovascular", "artery", "plaque", "blood pressure",
+        "hypertension", "cholesterol", "stroke", "blood clot", "circulation",
+        "parkinson", "alzheimer", "dementia", "sleep", "insomnia", "nerve"
     ]
 }
 
 FALLBACK_QUERIES = [
-    "medical scientist microscope laboratory",
-    "doctor examining mri brain scan",
-    "pharmaceutical research laboratory",
-    "human dna double helix animation",
+    "pharmacist holding medicine pills bottle",
+    "doctor talking to patient in clinic",
+    "healthy vitamins capsules supplements",
+    "medical scientist clinical trial lab",
     "surgeon operating room hospital",
     "red blood cells flowing artery",
-    "chemist pipette test tube lab",
+    "fresh healthy food vegetables nutrition",
     "cardiologist checking heart monitor",
-    "neurology brain synapses network",
+    "doctor examining x-ray scan",
     "modern hospital corridor doctors",
-    "pharmacist checking medicine pills",
-    "senior patient talking to doctor",
-    "biotechnology automated laboratory",
+    "woman taking daily vitamin pill",
+    "senior patient smiling with doctor",
+    "pharmaceutical factory medicine production",
     "healthy human heart beat 3d",
-    "vaccine vial syringe laboratory",
-    "microbiology petri dish bacteria",
-    "medical researcher looking at screen",
+    "vaccine vial syringe medical",
+    "doctor checking patient blood pressure",
+    "medical researcher looking at monitor",
     "CT scan diagnostic hospital room",
-    "immune system cells microscopic",
-    "woman exercising healthy lifestyle",
-    "healthy nutrition fresh vegetables",
-    "deep sleep brain waves monitoring",
-    "ophthalmologist eye examination",
-    "orthopedic physical therapy clinic",
-    "genetic sequencing computer screen"
+    "immune system cells fighting virus",
+    "people exercising outdoors healthy lifestyle",
+    "doctor prescribing medication clinic",
+    "deep sleep rest bedroom night",
+    "ophthalmologist eye vision exam",
+    "physical therapy joint pain relief",
+    "blood test tube medical laboratory"
 ]
 
 def load_set_file(filepath):
@@ -209,31 +207,34 @@ def clean_html(raw_html):
     text = re.sub(r"\s+", " ", text).strip()
     return text
 
-def is_safe_and_engaging_medical(title, summary):
+def is_safe_and_exciting_for_viewers(title, summary):
     combined = (title + " " + summary).lower()
     for bad in BANNED_KEYWORDS:
         if bad.lower() in combined:
             return False
-    for boring in BORING_ACADEMIC_KEYWORDS:
+    for boring in BORING_LECTURE_KEYWORDS:
         if boring.lower() in combined:
             return False
+    # استبعاد تجارب الفئران المعزولة إلا إذا كانت مرتبطة بعلاج مرض بشري مستعصٍ أو دواء جديد
+    if ("mice" in combined or "mouse" in combined or "rodent" in combined):
+        if not any(w in combined for w in ["drug", "pill", "treatment", "therapy", "cure", "cancer", "diabetes", "reverse", "human", "patient", "vitamin"]):
+            return False
+
     score = sum(1 for kw in MEDICAL_PRIORITY_KEYWORDS if kw in combined)
     return score >= 1
 
 def classify_medical_domain(title, summary):
-    """يحدد المجال الطبي للخبر لضمان تنوع أخبار الحلقة بين الأدوية والأعضاء والأمراض."""
     combined = (title + " " + summary).lower()
     title_low = title.lower()
-    best_domain = "general_medicine"
+    best_domain = "stubborn_chronic_diseases"
     best_hits = 0
 
     domain_order = [
-        "pharma_drugs",
-        "internal_organs",
-        "major_diseases_immunity",
-        "senses_bones_sleep_skin",
-        "metabolism_nutrition_aging",
-        "heart_and_brain"
+        "new_drugs_and_pills",
+        "vitamins_nutrition_and_body",
+        "stubborn_chronic_diseases",
+        "vital_internal_organs",
+        "heart_blood_and_nerves"
     ]
     for dom in domain_order:
         kws = MEDICAL_DOMAINS[dom]
@@ -243,8 +244,7 @@ def classify_medical_domain(title, summary):
             best_domain = dom
     return best_domain
 
-def calculate_viral_and_freshness_rank(title, summary, dt):
-    """يحسب قوة الخبر وإثارته للجمهور مع مراعاة حداثته."""
+def calculate_viral_and_freshness_rank(title, summary, dt, domain):
     now = datetime.datetime.now(datetime.timezone.utc)
     hours_old = max(0.0, (now - dt).total_seconds() / 3600.0)
 
@@ -261,9 +261,12 @@ def calculate_viral_and_freshness_rank(title, summary, dt):
     title_low = title.lower()
 
     med_pts = sum(1 for kw in MEDICAL_PRIORITY_KEYWORDS if kw in combined)
-    viral_pts = sum(3 if kw in title_low else (2 if kw in combined else 0) for kw in VIRAL_BREAKTHROUGH_KEYWORDS)
+    viral_pts = sum(3 if kw in title_low else (2 if kw in combined else 0) for kw in VIRAL_HUMAN_HEALTH_KEYWORDS)
 
-    return freshness_pts + med_pts + viral_pts
+    # مكافأة إضافية لأخبار الأدوية الجديدة والفيتامينات وعلاجات الأمراض المستعصية
+    domain_bonus = 5 if domain in ("new_drugs_and_pills", "vitamins_nutrition_and_body", "stubborn_chronic_diseases") else 2
+
+    return freshness_pts + med_pts + viral_pts + domain_bonus
 
 def parse_rss_date(date_str):
     now = datetime.datetime.now(datetime.timezone.utc)
@@ -300,12 +303,12 @@ def fetch_top_5_medical_news():
                     continue
                 if link in used_links:
                     continue
-                if not is_safe_and_engaging_medical(title, desc):
+                if not is_safe_and_exciting_for_viewers(title, desc):
                     continue
 
                 dt = parse_rss_date(pub_date_raw)
                 domain = classify_medical_domain(title, desc)
-                total_rank = calculate_viral_and_freshness_rank(title, desc, dt)
+                total_rank = calculate_viral_and_freshness_rank(title, desc, dt, domain)
 
                 candidates.append({
                     "source": source_name,
@@ -327,6 +330,7 @@ def fetch_top_5_medical_news():
     source_counts = {}
     domain_counts = {}
 
+    # اختيار خبر واحد من كل مجال من المجالات الخمسة (أدوية، فيتامينات، أمراض مستعصية، أعضاء داخلية، قلب وأعصاب)
     for item in candidates:
         norm_title = re.sub(r"[^a-z0-9]", "", item["title"].lower())[:45]
         if norm_title in seen_titles:
@@ -354,8 +358,6 @@ def fetch_top_5_medical_news():
             if norm_title in seen_titles:
                 continue
             dom = item["domain"]
-            if dom == "heart_and_brain" and domain_counts.get(dom, 0) >= 1 and len(candidates) > 10:
-                continue
             if domain_counts.get(dom, 0) >= 2 and len(candidates) > 10:
                 continue
 
@@ -378,7 +380,7 @@ def fetch_top_5_medical_news():
     return selected
 
 # ==========================================
-# 4. توليد السيناريو الديناميكي (بين 10 و 15 دقيقة)
+# 4. توليد السيناريو المشوق (ممنوع أسلوب محاضرات الأحياء!)
 # ==========================================
 def clean_json_text(text):
     cleaned = re.sub(r"^\x60{3}(?:json)?\s*", "", text.strip())
@@ -413,8 +415,46 @@ def get_available_gemini_models():
             ordered.append(m)
     return ordered if ordered else preferred
 
+# عبارات وأسئلة مصغرة مدققة لغوياً وإملائياً 100% ومصنفة حسب موضوع الخبر
+VERIFIED_THUMBNAIL_HOOKS = {
+    "new_drugs_and_pills": [
+        "NEW MIRACLE PILL?",
+        "GAME CHANGING DRUG!",
+        "ONE PILL FIXES THIS?",
+        "NEW FDA BREAKTHROUGH!",
+        "DOCTORS STUNNED!"
+    ],
+    "vitamins_nutrition_and_body": [
+        "VITAMIN WARNING!",
+        "HEALS YOUR BODY!",
+        "DAILY HABIT DANGER?",
+        "THE MISSING VITAMIN?",
+        "REPAIRS YOUR ORGANS!"
+    ],
+    "stubborn_chronic_diseases": [
+        "IS THIS THE CURE?",
+        "FINALLY A CURE?",
+        "STOPS DISEASE FAST!",
+        "HOPE FOR MILLIONS!",
+        "REVERSING DISEASE?"
+    ],
+    "vital_internal_organs": [
+        "SAVE YOUR ORGANS!",
+        "SILENT BODY WARNING!",
+        "HEALS LIVER & KIDNEY?",
+        "HIDDEN ORGAN RISK!",
+        "CLEANSE YOUR BODY?"
+    ],
+    "heart_blood_and_nerves": [
+        "CLEAN YOUR ARTERIES?",
+        "SILENT HEART SIGN!",
+        "BLOOD PRESSURE FIX?",
+        "PROTECT YOUR HEART!",
+        "WARNING IN YOUR BLOOD!"
+    ]
+}
+
 def generate_script_with_gemini(news_items):
-    # اختيار طول الحلقة عشوائياً كل يوم ليتراوح الفيديو طبيعياً بين 10 و 15 دقيقة
     pacing_profiles = [
         {"target_label": "10 to 11 minutes", "words_per_act": "75 to 85 words", "min_words": 72},
         {"target_label": "11.5 to 12.5 minutes", "words_per_act": "88 to 98 words", "min_words": 84},
@@ -424,14 +464,7 @@ def generate_script_with_gemini(news_items):
     profile = random.choice(pacing_profiles)
     print(f"Selected Episode Pacing Profile: {profile['target_label']} ({profile['words_per_act']} per act)")
 
-    # التنويع التلقائي بين سؤال مشوق أو عبارة/كلمات خاطفة على الصورة المصغرة
-    thumbnail_hook_styles = [
-        'a short 2-to-4 word curiosity QUESTION ending with a question mark (e.g., "IS THIS THE CURE?", "WHY DID THIS WORK?")',
-        'a bold, punchy 2-to-4 word dramatic STATEMENT or PHRASE without a question mark (e.g., "HIDDEN ORGAN TRIGGER!", "NEW PILL BREAKTHROUGH", "CELLULAR REPAIR UNLOCKED")'
-    ]
-    chosen_thumb_style = random.choice(thumbnail_hook_styles)
-
-    # اختيار خبر غير متعلق بالمخ ليكون هو محور الصورة المصغرة مع تنويع الألوان السينمائية
+    # اختيار خبر غير متعلق بالمخ ليكون هو محور الصورة المصغرة
     non_brain_candidates = [
         (idx, it) for idx, it in enumerate(news_items, 1)
         if "brain" not in (it["title"] + " " + it["summary"]).lower()
@@ -443,65 +476,71 @@ def generate_script_with_gemini(news_items):
     else:
         thumb_story_idx, thumb_story_item = 1, news_items[0]
 
+    thumb_domain = thumb_story_item.get("domain", "new_drugs_and_pills")
+    verified_hook = random.choice(VERIFIED_THUMBNAIL_HOOKS.get(thumb_domain, VERIFIED_THUMBNAIL_HOOKS["new_drugs_and_pills"]))
+
     color_palettes = [
-        "vibrant emerald green, gold, and deep clinical navy",
-        "crimson red, warm amber gold, and dark cinematic teal",
-        "glowing magenta, royal purple, and bright silver-white",
+        "vibrant emerald green, warm gold, and deep clinical navy",
+        "crimson red, glowing amber gold, and dark cinematic teal",
         "radiant golden-orange, electric cyan, and deep obsidian",
-        "ruby red, bright turquoise, and clean laboratory white"
+        "ruby red, bright turquoise, and clean laboratory white",
+        "royal purple, glowing magenta, and bright silver-white"
     ]
     chosen_palette = random.choice(color_palettes)
 
     news_blob = ""
     for idx, item in enumerate(news_items, 1):
         news_blob += (
-            f"STORY {idx} (Category: {item.get('domain', 'medicine')}):\n"
+            f"STORY {idx} (Focus: {item.get('domain', 'medicine')}):\n"
             f"Title: {item['title']}\n"
             f"Summary: {item['summary']}\n\n"
         )
 
     prompt = f"""
-You are the lead medical science documentary narrator for the YouTube channel "MedPulse 5".
-Write a deeply engaging, authoritative, empathetic, 100% policy-safe English script covering these 5 real medical breakthroughs.
+You are a charismatic, captivating, world-class medical TV host for the hit YouTube channel "MedPulse 5".
+Your mission is to turn these 5 real medical breakthroughs into an exciting, suspenseful, deeply relatable health show for everyday viewers.
 Target total video duration for today's episode: {profile['target_label']}.
 
 INPUT STORIES:
 {news_blob}
 
-CRITICAL RULES:
-1. Speak directly to the viewer ("you", "your body", "your health").
-2. NEVER say website names (like MedicalXpress, ScienceDaily, EurekAlert, MedPage, SciTechDaily) or publication dates out loud in the spoken narration!
-3. Instead, attribute findings naturally to "researchers", "clinical investigators", "medical scientists", or the university/hospital mentioned in the summary.
-4. Keep all language 100% YouTube Advertiser-Friendly. Avoid graphic descriptions of violence or disturbing imagery.
-5. Each of the 5 stories MUST be divided into exactly 4 narrative acts (Act 1: The Hidden Medical Challenge, Act 2: The Discovery & Mechanism, Act 3: Clinical Evidence & Impact, Act 4: What This Means For Your Health).
-6. LENGTH REQUIREMENT: Each of the 20 acts (5 stories x 4 acts) MUST contain {profile['words_per_act']} of natural spoken narration.
-7. For EVERY act, provide 3 distinct, specific, visual Pexels search queries (3 to 5 English words each, matching the exact organ, medication, disease, or laboratory process in that story) so the video never shows repetitive footage.
-8. For EVERY story, provide a short, punchy `lower_third` headline (maximum 52 characters) and a `chapter_title` (maximum 42 characters).
-9. In `outro_narration`, thank the viewer for watching and invite them to subscribe to "MedPulse 5" for daily medical breakthroughs.
-10. Provide 3 distinct, high-CTR `youtube_titles` (under 90 chars each). Title #1 MUST be the strongest, most clickable recommended title.
-11. For `thumbnail_prompt`: Base the visual strictly on STORY #{thumb_story_idx} ("{thumb_story_item['title']}").
+STRICT ANTI-LECTURE RULES (READ CAREFULLY!):
+1. DO NOT sound like a biology professor, textbook, or dry academic research report!
+2. FORBIDDEN: Never bore the viewer with complicated molecular receptor names, dry statistics, or university lecture tone.
+3. MAKE IT EXCITING & PERSONAL: Every single sentence must connect directly to the viewer's own human body, their daily symptoms, their kitchen vitamins, their organs (liver, kidneys, heart, gut, eyes, joints), new life-saving pills/drugs, and real hope for stubborn or chronic diseases!
+4. Speak directly to the viewer ("you", "your body", "your organs", "your daily health") with warmth, suspense, and excitement.
+5. NEVER say website names (like MedicalXpress, ScienceDaily, EurekAlert, MedPage, SciTechDaily, Drugs.com) or publication dates out loud!
+6. Each of the 5 stories MUST be divided into 4 thrilling, viewer-focused acts:
+   - Act 1: The Body Mystery & Warning Sign (Hook the viewer with how this disease, symptom, or vitamin deficiency secretly affects the human body in daily life).
+   - Act 2: The Game-Changing Breakthrough (Reveal the exciting new drug, pill, vitamin effect, or treatment for a stubborn disease in simple, dramatic everyday language).
+   - Act 3: What Happens Inside Your Body (Vividly explain how this treatment, medication, or nutrient heals, protects, or repairs human organs and blood from within).
+   - Act 4: How This Changes Your Health & Future (Practical takeaway for the viewer's life, real hope for patients, and what this means for your body starting today).
+7. LENGTH REQUIREMENT: Each of the 20 acts (5 stories x 4 acts) MUST contain {profile['words_per_act']} of natural spoken narration.
+8. For EVERY act, provide 3 distinct, specific visual Pexels search queries (3 to 5 English words each, focusing on medicine pills, vitamins, doctors with patients, specific human organs, blood flow, healthy food, joint pain relief, hospital care).
+9. Provide 3 distinct, high-CTR `youtube_titles` (under 90 chars each). Title #1 MUST be the strongest, most clickable recommended title.
+10. For `thumbnail_prompt`: Base the visual strictly on STORY #{thumb_story_idx} ("{thumb_story_item['title']}").
     - STRICTLY FORBIDDEN: Do NOT draw a human brain, head silhouette, or neural synapses!
-    - Instead, depict the specific subject of Story #{thumb_story_idx} (such as a glowing translucent medical capsule/pill, heart & arteries, liver/kidney/lungs/gut, microscopic immune cells fighting disease, vaccine vial, or a doctor examining a futuristic diagnostic display).
-    - Use a rich, eye-catching color palette featuring {chosen_palette}.
-    - MUST include instructions to render {chosen_thumb_style} in LARGE BOLD GLOWING YELLOW AND WHITE CINEMATIC TEXT on the left side of the image (in ALL CAPS).
+    - Depict a concrete, exciting medical visual from Story #{thumb_story_idx} (such as a glowing translucent medicine pill/capsule, golden vitamin softgels, human heart/liver/kidneys/lungs/gut, or blood cells healing).
+    - Use a rich color palette featuring {chosen_palette}.
+    - LINGUISTIC ACCURACY RULE: Instruct the image generator to render the EXACT verified English text "{verified_hook}" in LARGE BOLD GLOWING YELLOW AND WHITE SANS-SERIF LETTERS on the left side, with 100% exact spelling and clear typography.
 
 Return ONLY valid JSON matching this exact structure (no markdown fences, no extra commentary):
 {{
   "youtube_titles": [
     "Title Option 1 (The #1 Best High-CTR Recommended Title)",
-    "Title Option 2 (Curiosity & Health Impact Angle)",
-    "Title Option 3 (Direct Clinical Breakthrough Angle)"
+    "Title Option 2 (New Treatments, Vitamins & Body Impact Angle)",
+    "Title Option 3 (Curiosity & Disease Breakthrough Angle)"
   ],
-  "youtube_description": "3-paragraph SEO description summarizing the 5 breakthroughs",
+  "youtube_description": "3-paragraph engaging SEO description summarizing the 5 breakthroughs and how they impact human health",
   "youtube_tags": "tag1, tag2, tag3, ... (15 tags)",
-  "thumbnail_prompt": "Ultra-realistic 16:9 cinematic medical illustration of [specific non-brain visual from Story #{thumb_story_idx}], rich color palette of {chosen_palette}, dramatic lighting, 8k resolution, with large bold glowing yellow and white cinematic text on the left side that says \\"YOUR 2-4 WORD HOOK HERE\\"",
-  "hook_narration": "55 to 70 words captivating opening hook introducing today's 5 breakthroughs on MedPulse 5",
-  "hook_queries": ["medical laboratory scientist", "pharmacist medicine pills", "red blood cells artery"],
+  "thumbnail_prompt": "Ultra-realistic 16:9 cinematic medical illustration of [specific non-brain visual from Story #{thumb_story_idx}], rich color palette of {chosen_palette}, dramatic lighting, 8k resolution, with large bold glowing yellow and white sans-serif text on the left side with exact spelling that says \\"{verified_hook}\\"",
+  "hook_narration": "55 to 70 words thrilling opening hook welcoming viewers to MedPulse 5 and teasing today's new treatments, medications, and body discoveries",
+  "hook_queries": ["pharmacist medicine pills", "doctor talking to patient", "healthy vitamins capsules"],
   "stories": [
     {{
       "story_number": 1,
-      "chapter_title": "Short Chapter Title (max 42 chars)",
-      "lower_third": "Short Banner Headline (max 52 chars)",
+      "chapter_title": "Short Exciting Chapter Title (max 42 chars)",
+      "lower_third": "Short Punchy Headline (max 52 chars)",
       "acts": [
         {{
           "act_number": 1,
@@ -526,8 +565,8 @@ Return ONLY valid JSON matching this exact structure (no markdown fences, no ext
       ]
     }}
   ],
-  "outro_narration": "55 to 70 words warm conclusion inviting viewers to subscribe to MedPulse 5 and share their thoughts",
-  "outro_queries": ["doctor smiling hospital", "healthy senior couple walking", "modern medical center"]
+  "outro_narration": "55 to 70 words warm conclusion inviting viewers to subscribe to MedPulse 5 and share which breakthrough gave them the most hope",
+  "outro_queries": ["doctor smiling hospital", "healthy senior couple walking", "modern medical clinic"]
 }}
 """
 
@@ -541,13 +580,20 @@ Return ONLY valid JSON matching this exact structure (no markdown fences, no ext
                 model = genai.GenerativeModel(model_name)
                 response = model.generate_content(
                     prompt,
-                    generation_config={"temperature": 0.7},
+                    generation_config={"temperature": 0.72},
                     request_options={"timeout": 90}
                 )
                 raw_text = response.text
                 cleaned = clean_json_text(raw_text)
                 data = json.loads(cleaned)
                 if "stories" in data and len(data["stories"]) == 5:
+                    # ضمان وجود العبارة المدققة لغوياً وإملائياً داخل وصف الصورة المصغرة دائماً
+                    tp = data.get("thumbnail_prompt", "")
+                    if verified_hook not in tp:
+                        tp = re.sub(r'says\s+"[^"]*"', f'says "{verified_hook}"', tp)
+                        if verified_hook not in tp:
+                            tp = f'{tp}, with large bold glowing yellow and white sans-serif text on the left side with exact spelling that says "{verified_hook}"'
+                        data["thumbnail_prompt"] = tp
                     print(f"Successfully generated script with {model_name}!")
                     return data
             except Exception as e:
@@ -579,15 +625,16 @@ def generate_tts(text, out_path):
     raise RuntimeError(f"Failed to generate TTS audio for {out_path}")
 
 # ==========================================
-# 6. تحميل وتطبيع مقاطع الفيديو عالية الدقة (منع التجميد والغبش)
+# 6. تحميل وتطبيع مقاطع الفيديو عالية الدقة (منع التجميد والغبش + تسريع المعالجة)
 # ==========================================
 def normalize_clip_hd(raw_path, norm_path):
     """
-    يحول أي فيديو تم تحميله إلى صيغة قياسية ثابتة الإطارات (24 إطار/ثانية)
-    وبدقة 1280x720 وجودة عالية جداً لمنع أي تجميد أو غبش أثناء المونتاج.
+    يحول المقطع إلى دقة 1280x720 فائقة الوضوح و24 إطاراً ثابتاً لمنع التجميد،
+    مع معالجة أول 14 ثانية فقط من المقطع الخام لاختصار وقت التوليد إلى النصف دون أي مساس بالجودة.
     """
     cmd = [
         "ffmpeg", "-y",
+        "-t", "14",
         "-i", raw_path,
         "-vf", "scale=1280:720:force_original_aspect_ratio=increase,crop=1280:720,fps=24,format=yuv420p",
         "-c:v", "libx264",
@@ -860,12 +907,12 @@ def format_timestamp(seconds):
     return f"{m:02d}:{s:02d}"
 
 def main():
-    print("1. Fetching top 5 fresh, diverse, high-impact medical news stories...")
+    print("1. Fetching top 5 exciting medical stories (new drugs, stubborn disease cures, vitamins & organs)...")
     news_items = fetch_top_5_medical_news()
     for i, it in enumerate(news_items, 1):
         print(f"  Story {i} [{it.get('domain')}]: {it['title']} ({it['source']} - Score: {it.get('score')})")
 
-    print("2. Generating dynamic documentary script via Gemini...")
+    print("2. Generating captivating, non-lecture medical TV script via Gemini...")
     script_data = generate_script_with_gemini(news_items)
 
     used_video_ids = load_set_file(USED_VIDEOS_FILE)
@@ -878,7 +925,7 @@ def main():
     print("3. Building Intro Hook...")
     hook_clip, hook_dur = build_spoken_scene(
         script_data["hook_narration"],
-        script_data.get("hook_queries", ["medical research laboratory", "doctor hospital"]),
+        script_data.get("hook_queries", ["pharmacist medicine pills", "doctor talking to patient"]),
         story_num=None,
         lower_third="TODAY'S TOP 5 MEDICAL BREAKTHROUGHS",
         used_video_ids=used_video_ids,
@@ -939,7 +986,7 @@ def main():
         audio_codec="aac",
         audio_bitrate="128k",
         preset="veryfast",
-        threads=2,
+        threads=4,
         ffmpeg_params=[
             "-crf", "21",
             "-maxrate", "2200k",
@@ -958,11 +1005,11 @@ def main():
     # تجهيز خيارات العناوين الثلاثة مع علامة (موصى به)
     titles_list = script_data.get("youtube_titles", [])
     if not isinstance(titles_list, list) or len(titles_list) == 0:
-        single_t = script_data.get("youtube_title", "Top 5 Medical Breakthroughs Changing Healthcare Today")
+        single_t = script_data.get("youtube_title", "Top 5 Medical Breakthroughs: New Treatments, Vitamins & Cures")
         titles_list = [
             single_t,
-            "5 Surprising Medical Discoveries & Treatments You Need to Know",
-            "New Clinical Breakthroughs: Medications, Organs & Disease Prevention"
+            "5 Game-Changing Medical Discoveries & New Medications Explained",
+            "How These 5 New Treatments & Vitamins Transform Your Body"
         ]
     while len(titles_list) < 3:
         titles_list.append(titles_list[0])
@@ -996,17 +1043,17 @@ SCIENTIFIC SOURCES & REFERENCES:
 MEDICAL DISCLAIMER:
 The content on MedPulse 5 is for informational and educational purposes only and does not substitute professional medical advice, diagnosis, or treatment. Always consult your physician or qualified healthcare provider with any questions you may have regarding a medical condition.
 
-#MedPulse5 #MedicalBreakthroughs #HealthNews #Medicine #Longevity #ClinicalResearch
+#MedPulse5 #MedicalBreakthroughs #HealthNews #NewTreatments #Vitamins #Medicine
 
 ==================================================
 3. YOUTUBE TAGS (انسخ هذه الكلمات المفتاحية وضعها في خانة العلامات Tags):
 ==================================================
-{script_data.get('youtube_tags', 'medical breakthroughs, health news, medicine, longevity, clinical trials, MedPulse 5')}
+{script_data.get('youtube_tags', 'medical breakthroughs, new medications, vitamins, disease cures, health news, MedPulse 5')}
 
 ==================================================
-4. AI THUMBNAIL PROMPT (انسخ هذا الوصف وضعه في موقع الصور لتوليد صورة مصغرة متنوعة للفيديو):
+4. AI THUMBNAIL PROMPT (انسخ هذا الوصف وضعه في موقع الصور لتوليد صورة مصغرة متنوعة ومدققة لغوياً):
 ==================================================
-{script_data.get('thumbnail_prompt', 'Dramatic ultra-realistic 16:9 medical illustration showing a glowing translucent pharmaceutical capsule releasing golden healing particles inside the bloodstream, emerald and crimson cinematic lighting, 8k, with large bold glowing yellow text on the left side that says "NEW PILL BREAKTHROUGH!"')}
+{script_data.get('thumbnail_prompt', 'Dramatic ultra-realistic 16:9 medical illustration showing a glowing translucent pharmaceutical capsule and golden vitamin softgels healing human organs, emerald and crimson cinematic lighting, 8k, with large bold glowing yellow and white sans-serif text on the left side with exact spelling that says "NEW MIRACLE PILL?"')}
 """
     with open(YOUTUBE_DETAILS_PATH, "w", encoding="utf-8") as f:
         f.write(details_content)
