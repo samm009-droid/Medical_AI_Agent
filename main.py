@@ -1,3 +1,6 @@
+
+
+
 import os
 import re
 import json
@@ -21,9 +24,13 @@ from moviepy.editor import (
 import moviepy.audio.fx.all as afx
 from google import genai
 
+# Compatibility fix for Newer Pillow versions with MoviePy
 if not hasattr(Image, 'ANTIALIAS'):
     Image.ANTIALIAS = Image.Resampling.LANCZOS
 
+# ==========================================
+# 1. ENVIRONMENT & API KEYS
+# ==========================================
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "").strip()
 PEXELS_API_KEY = os.environ.get("PEXELS_API_KEY", "").strip()
 
@@ -41,6 +48,9 @@ LOGO_PATH = "تنزيل.jpeg"
 os.makedirs("temp_Media", exist_ok=True)
 os.makedirs("output", exist_ok=True)
 
+# ==========================================
+# 2. MEMORY MANAGEMENT (ANTI-DUPLICATION)
+# ==========================================
 def load_set(filepath):
     if not os.path.exists(filepath):
         return set()
@@ -59,6 +69,9 @@ def save_to_set(filepath, items):
 used_news = load_set(USED_NEWS_FILE)
 used_videos = load_set(USED_VIDEOS_FILE)
 
+# ==========================================
+# 3. PATIENT-FIRST MEDICAL RSS FEEDS & ANTI-LECTURE FILTER
+# ==========================================
 RSS_FEEDS = [
     ("Drugs.com New Medications", "https://www.drugs.com/feeds/new_drugs.xml"),
     ("Drugs.com Clinical Headlines", "https://www.drugs.com/feeds/headline_news.xml"),
@@ -293,6 +306,9 @@ def fetch_fresh_medical_news(target_count=5):
         print(f"  {idx}. [{s['domain']}] {s['title']} (Score: {s['excitement']})")
     return selected
 
+# ==========================================
+# 4. GEMINI TV-SHOW SCRIPT & SYNCHRONIZED SEO TITLE #1 + THUMBNAIL
+# ==========================================
 def clean_json_text(text):
     text = text.strip()
     text = re.sub(r'^\x60{3}(?:json)?\s*', '', text, flags=re.IGNORECASE)
@@ -300,8 +316,105 @@ def clean_json_text(text):
     start = text.find('{')
     end = text.rfind('}')
     if start != -1 and end != -1 and end > start:
-        return text[start:end+1]
+        text = text[start:end+1]
+    text = re.sub(r',\s*([}\]])', r'\1', text)
     return text
+
+def validate_and_repair_script_data(data, stories):
+    if not isinstance(data, dict):
+        raise ValueError("Script JSON root is not a dictionary.")
+
+    intro = data.get("intro", {})
+    if isinstance(intro, str):
+        intro = {
+            "narration": intro,
+            "lower_third": "MEDPULSE 5: DAILY HEALTH BRIEFING",
+            "search_queries": ["doctor smiling clinic", "vitamin capsules close up", "healthy family outdoors"]
+        }
+    elif isinstance(intro, dict):
+        nar = intro.get("narration") or intro.get("text") or intro.get("script") or ""
+        if not str(nar).strip():
+            raise ValueError("Intro narration is empty.")
+        intro["narration"] = str(nar).strip()
+        intro.setdefault("lower_third", "MEDPULSE 5: DAILY HEALTH BRIEFING")
+        if not isinstance(intro.get("search_queries"), list) or not intro["search_queries"]:
+            intro["search_queries"] = ["doctor smiling clinic", "vitamin capsules close up", "healthy family outdoors"]
+    else:
+        raise ValueError("Invalid intro format.")
+    data["intro"] = intro
+
+    outro = data.get("outro", {})
+    if isinstance(outro, str):
+        outro = {
+            "narration": outro,
+            "lower_third": "SUBSCRIBE TO MEDPULSE 5",
+            "search_queries": ["doctor shaking hands patient", "healthy seniors walking", "modern hospital sunrise"]
+        }
+    elif isinstance(outro, dict):
+        nar = outro.get("narration") or outro.get("text") or outro.get("script") or ""
+        if not str(nar).strip():
+            raise ValueError("Outro narration is empty.")
+        outro["narration"] = str(nar).strip()
+        outro.setdefault("lower_third", "SUBSCRIBE TO MEDPULSE 5")
+        if not isinstance(outro.get("search_queries"), list) or not outro["search_queries"]:
+            outro["search_queries"] = ["doctor shaking hands patient", "healthy seniors walking", "modern hospital sunrise"]
+    else:
+        raise ValueError("Invalid outro format.")
+    data["outro"] = outro
+
+    story_list = data.get("stories", [])
+    if not isinstance(story_list, list) or len(story_list) != 5:
+        raise ValueError("stories must be a list of exactly 5 items.")
+
+    default_act_names = [
+        "What This Means For Your Body",
+        "How The Treatment Or Vitamin Works",
+        "Inside The Clinical Proof",
+        "Your Practical Health Takeaway"
+    ]
+
+    default_queries_per_act = [
+        ["doctor talking patient clinic", "woman taking vitamin pill", "pharmacist holding capsule"],
+        ["heart monitor hospital", "medical laboratory microscope", "doctor checking scan"],
+        ["clinical trial hospital", "surgeon operating room", "medical researcher lab"],
+        ["healthy senior jogging", "fresh vegetables kitchen", "happy couple walking park"]
+    ]
+
+    for idx, st in enumerate(story_list):
+        if not isinstance(st, dict):
+            raise ValueError(f"Story {idx+1} is not a dict.")
+        st["story_number"] = idx + 1
+        st.setdefault("chapter_title", stories[idx]["title"][:55])
+        st.setdefault("source_url", stories[idx]["link"])
+
+        acts = st.get("acts") or st.get("segments") or st.get("scenes") or []
+        if not isinstance(acts, list) or len(acts) < 4:
+            raise ValueError(f"Story {idx+1} has fewer than 4 acts.")
+
+        repaired_acts = []
+        for a_i, act in enumerate(acts[:4]):
+            if isinstance(act, str):
+                act = {
+                    "act_type": default_act_names[a_i],
+                    "narration": act,
+                    "lower_third": st["chapter_title"][:55],
+                    "search_queries": default_queries_per_act[a_i]
+                }
+            elif isinstance(act, dict):
+                nar = act.get("narration") or act.get("text") or act.get("script") or ""
+                if not str(nar).strip():
+                    raise ValueError(f"Story {idx+1} Act {a_i+1} has empty narration.")
+                act["narration"] = str(nar).strip()
+                act.setdefault("act_type", default_act_names[a_i])
+                act.setdefault("lower_third", st["chapter_title"][:55])
+                if not isinstance(act.get("search_queries"), list) or not act["search_queries"]:
+                    act["search_queries"] = default_queries_per_act[a_i]
+            else:
+                raise ValueError(f"Story {idx+1} Act {a_i+1} invalid format.")
+            repaired_acts.append(act)
+        st["acts"] = repaired_acts
+
+    return data
 
 THUMBNAIL_COLOR_PALETTES = [
     "Vibrant Ruby Red, Warm Amber Gold, and Crisp Clinical White lighting with deep contrast",
@@ -343,101 +456,181 @@ def generate_script_with_gemini(stories):
     print(f"Synchronized Hero Story #{hero_story_num}: {hero_story['title']}")
     print(f"Matched Verified Thumbnail Hook: '{chosen_thumb_hook['text']}' ({chosen_thumb_hook['type']})")
 
-    prompt = (
-        f"You are the charismatic lead host of 'MedPulse 5', a hugely popular medical television show for everyday people.\n"
-        f"Your viewers are NOT biology students looking for a dry textbook lecture! They are everyday people who care deeply about their bodies, their organs, new pills and medications, curing stubborn diseases, vitamins, longevity, and protecting the people they love.\n\n"
-        f"Today's target episode length is {chosen_profile['label']}.\n\n"
-        f"Here are the 5 real medical breakthroughs for today's episode:\n"
-        f"{stories_text}\n"
-        f"CRITICAL ANTI-LECTURE & EXCITEMENT RULES (MUST FOLLOW STRICTLY):\n"
-        f"1. NO BIOLOGY LECTURES: Never sound like a dry university professor or academic report. Translate every complex term immediately into vivid human reality.\n"
-        f"2. FOCUS ON PILLS, VITAMINS, ORGANS & STUBBORN DISEASES: Speak directly to the viewer ('you', 'your heart', 'your kidneys', 'your joints', 'your daily supplements'). Highlight what this means for stubborn illnesses, new medications, vitamins, and organ repair.\n"
-        f"3. NEVER mention website names (like MedicalXpress, ScienceDaily, Drugs.com) or publication dates out loud. Only credit universities, hospitals, or clinical teams naturally.\n"
-        f"4. Keep the intro fast, warm, and irresistible (2 sentences max) before teasing what is coming up and jumping into Story #1.\n\n"
-        f"DOCUMENTARY STRUCTURE (22 NARRATION SEGMENTS TOTAL):\n"
-        f"- 'intro': 1 segment (50 to 65 words). Hook the viewer immediately with the most exciting cure/pill/vitamin discovery of the day, welcome them to MedPulse 5, and promise 5 breakthroughs that could change how they care for their body.\n"
-        f"- 'stories': Exactly 5 stories. Each story MUST have:\n"
-        f"  - 'story_number': 1 to 5\n"
-        f"  - 'chapter_title': Compelling, everyday human-interest chapter title (4 to 7 words)\n"
-        f"  - 'source_url': Exact link provided\n"
-        f"  - 'acts': Exactly 4 acts per story (20 story acts total across the 5 stories).\n"
-        f"    Each act MUST contain:\n"
-        f"    - 'act_type':\n"
-        f"       * Act 1: 'What This Means For Your Body'\n"
-        f"       * Act 2: 'How The Treatment Or Vitamin Works'\n"
-        f"       * Act 3: 'Inside The Clinical Proof'\n"
-        f"       * Act 4: 'Your Practical Health Takeaway'\n"
-        f"    - 'narration': Rich, warm, energetic spoken narration of {chosen_profile['words_per_act']} (minimum {chosen_profile['min_words']} words per act).\n"
-        f"    - 'lower_third': Crisp TV banner headline (maximum 55 characters).\n"
-        f"    - 'search_queries': A list of 3 DIFFERENT, VIVID, CONCRETE visual search queries for Pexels HD stock video (2 to 4 words each).\n"
-        f"- 'outro': 1 segment (55 to 70 words). Warmly wrap up today's 5 breakthroughs, ask viewers to share in the comments which discovery gave them the most hope (#1 through #5), invite them to subscribe to MedPulse 5, and end with an uplifting sign-off.\n\n"
-        f"YOUTUBE SEARCH SEO TITLES & 100% SYNCHRONIZED THUMBNAIL PROMPT:\n"
-        f"1. 'youtube_titles': Provide a list of 3 HIGH-CTR, SEARCH-OPTIMIZED English YouTube titles:\n"
-        f"   - CRITICAL SYNCHRONIZATION RULE FOR TITLE #1 (First item in the list, which is the Recommended Title):\n"
-        f"     * Title #1 MUST be 100% about HERO STORY #{hero_story_num} ('{hero_story['title']}')!\n"
-        f"     * Why? Because the video's Thumbnail Prompt is locked to HERO STORY #{hero_story_num}, so Title #1 and the Thumbnail MUST match 100%!\n"
-        f"   - Title #2: Combine HERO STORY #{hero_story_num} with one other major breakthrough from today's episode.\n"
-        f"   - Title #3: A high-curiosity multi-story title combining 3 of today's most searched health topics.\n"
-        f"   - ALL 3 titles MUST start their FIRST 4 WORDS with high-volume everyday health search keywords that millions of regular people type into YouTube Search (such as 'New Pill Stops...', '1 Daily Vitamin...', 'Reversing Kidney Damage...', 'Curing Chronic Pain...', 'Restoring Lost Vision...', 'Cleaning Clogged Arteries...', 'New Diabetes Treatment...').\n"
-        f"   - NEVER start a title with obscure technical jargon or weak textbook phrasing.\n"
-        f"   - End each title with a strong parenthetical or colon search booster.\n\n"
-        f"2. 'thumbnail_prompt': Write a detailed English image-generation prompt (85 to 120 words) that is 100% SYNCHRONIZED with Title #1 and HERO STORY #{hero_story_num} ('{hero_story['title']}'):\n"
-        f"   - VISUAL ALIGNMENT WITH TITLE #1: Depict the exact medical miracle, organ, pill, vitamin, or cure featured in Title #1 (HERO STORY #{hero_story_num}).\n"
-        f"   - STRICT NO-BRAIN RULE: Do NOT draw a human brain or glowing head silhouette! Focus on the specific organ, glowing pill/capsule, vitamin, heart, lungs, kidneys, eyes, arteries, joints, or cellular shield of HERO STORY #{hero_story_num}.\n"
-        f"   - COLOR PALETTE: Explicitly require this exact color scheme: '{chosen_palette}'.\n"
-        f"   - VERIFIED TEXT OVERLAY: Require massive, ultra-clean 3D cinematic typography on the left side in bold yellow and white font reading the exact verified English hook: '{chosen_thumb_hook['text']}' (spell every letter identically, maximum 3 words, no extra words on the image).\n"
-        f"   - Explicitly specify: 'Photorealistic 8k medical documentary thumbnail, 16:9 widescreen aspect ratio, dramatic rim lighting, razor-sharp focus, ultra-high CTR composition.'\n\n"
-        f"3. 'description_intro': A compelling 3-sentence SEO paragraph summarizing today's 5 medical breakthroughs.\n"
-        f"4. 'tags': A comma-separated string of 18 high-traffic English YouTube SEO tags.\n\n"
-        f"Return ONLY valid JSON matching the exact keys: youtube_titles, thumbnail_prompt, description_intro, tags, intro, stories, outro."
-    )
+    prompt = f"""
+You are the charismatic lead host of "MedPulse 5", a hugely popular medical television show for everyday people.
+Your viewers are NOT biology students looking for a dry textbook lecture! They are everyday people who care deeply about their bodies, their organs, new pills and medications, curing stubborn diseases, vitamins, longevity, and protecting the people they love.
+
+Today's target episode length is {chosen_profile['label']}.
+
+Here are the 5 real medical breakthroughs for today's episode:
+{stories_text}
+
+CRITICAL ANTI-LECTURE & EXCITEMENT RULES (MUST FOLLOW STRICTLY):
+1. NO BIOLOGY LECTURES: Never sound like a dry university professor or academic report. Translate every complex term immediately into vivid human reality (e.g., instead of lecturing about "endothelial cytokine pathways", say "imagine a tiny daily pill that acts like a cleaning crew inside your clogged arteries, washing away years of dangerous buildup").
+2. FOCUS ON PILLS, VITAMINS, ORGANS & STUBBORN DISEASES: In every single story, speak directly to the viewer ("you", "your heart", "your kidneys", "your joints", "your daily supplements"). Highlight what this means for stubborn illnesses, new medications, vitamins, and organ repair.
+3. NEVER mention website names (like MedicalXpress, ScienceDaily, Drugs.com) or publication dates out loud. Only credit universities, hospitals, or clinical teams naturally.
+4. Keep the intro fast, warm, and irresistible (2 sentences max) before teasing what is coming up and jumping into Story #1.
+
+DOCUMENTARY STRUCTURE (22 NARRATION SEGMENTS TOTAL):
+- "intro": 1 segment (50 to 65 words). Hook the viewer immediately with the most exciting cure/pill/vitamin discovery of the day, welcome them to MedPulse 5, and promise 5 breakthroughs that could change how they care for their body.
+- "stories": Exactly 5 stories. Each story MUST have:
+  - "story_number": 1 to 5
+  - "chapter_title": Compelling, everyday human-interest chapter title (4 to 7 words, e.g., "The New Pill That Repairs Damaged Kidneys")
+  - "source_url": Exact link provided
+  - "acts": Exactly 4 acts per story (20 story acts total across the 5 stories).
+    Each act MUST contain:
+    - "act_type":
+       * Act 1: "What This Means For Your Body" (Start with a relatable human symptom, organ struggle, or stubborn disease that millions face, then drop the exciting news!)
+       * Act 2: "How The Treatment Or Vitamin Works" (Explain how the new pill, therapy, nutrient, or discovery works inside the human organ in vivid, simple, exciting language—zero dry lecturing!)
+       * Act 3: "Inside The Clinical Proof" (Share the real results from the hospital or research team and how strongly it repaired tissue, stopped disease, or protected patients)
+       * Act 4: "Your Practical Health Takeaway" (What does this mean for future treatments, daily habits, vitamins, or conversations with a doctor?)
+    - "narration": Rich, warm, energetic spoken narration of {chosen_profile['words_per_act']} (minimum {chosen_profile['min_words']} words per act). Use natural conversational transitions and rhetorical questions that keep the viewer hooked.
+    - "lower_third": Crisp TV banner headline (maximum 55 characters, all caps or title case).
+    - "search_queries": A list of 3 DIFFERENT, VIVID, CONCRETE visual search queries for Pexels HD stock video (2 to 4 words each).
+       * Query 1: Doctor, patient, pill bottle, or clinical care visual (e.g., "doctor giving medicine", "woman taking vitamin pill", "pharmacist holding capsule")
+       * Query 2: Specific organ, anatomy, or medical scan visual (e.g., "heart monitor hospital", "eye exam clinic", "kidney ultrasound scan")
+       * Query 3: Healthy active human lifestyle visual matching the story (e.g., "healthy senior jogging", "fresh vegetables kitchen", "woman sleeping peacefully")
+- "outro": 1 segment (55 to 70 words). Warmly wrap up today's 5 breakthroughs, ask viewers to share in the comments which discovery gave them the most hope (#1 through #5), invite them to subscribe to MedPulse 5, and end with an uplifting sign-off.
+
+YOUTUBE SEARCH SEO TITLES & 100% SYNCHRONIZED THUMBNAIL PROMPT:
+1. "youtube_titles": Provide a list of 3 HIGH-CTR, SEARCH-OPTIMIZED English YouTube titles:
+   - CRITICAL SYNCHRONIZATION RULE FOR TITLE #1 (First item in the list, which is the Recommended Title):
+     * Title #1 MUST be 100% about HERO STORY #{hero_story_num} ("{hero_story['title']}")!
+     * Why? Because the video's Thumbnail Prompt is locked to HERO STORY #{hero_story_num}, so Title #1 and the Thumbnail MUST match 100%!
+   - Title #2 (Second item): Combine HERO STORY #{hero_story_num} with one other major breakthrough from today's episode.
+   - Title #3 (Third item): A high-curiosity multi-story title combining 3 of today's most searched health topics.
+   - ALL 3 titles MUST start their FIRST 4 WORDS with high-volume everyday health search keywords that millions of regular people type into YouTube Search (such as "New Pill Stops...", "1 Daily Vitamin...", "Reversing Kidney Damage...", "Curing Chronic Pain...", "Restoring Lost Vision...", "Cleaning Clogged Arteries...", "New Diabetes Treatment...").
+   - NEVER start a title with obscure technical jargon (like "CRISPR", "mRNA", "Macrophage", "AI Mapping") or weak textbook phrasing.
+   - End each title with a strong parenthetical or colon search booster, e.g., "(Major Medical Breakthrough)" or ": 5 New Treatments For Your Body".
+
+2. "thumbnail_prompt": Write a detailed English image-generation prompt (85 to 120 words) that is 100% SYNCHRONIZED with Title #1 and HERO STORY #{hero_story_num} ("{hero_story['title']}"):
+   - VISUAL ALIGNMENT WITH TITLE #1: Depict the exact medical miracle, organ, pill, vitamin, or cure featured in Title #1 (HERO STORY #{hero_story_num}) so that when a viewer looks at the thumbnail and reads Title #1, they see the exact same story!
+   - STRICT NO-BRAIN RULE: Do NOT draw a human brain or glowing head silhouette! Focus on the specific organ, glowing pill/capsule, vitamin, heart, lungs, kidneys, eyes, arteries, joints, or cellular shield of HERO STORY #{hero_story_num}.
+   - COLOR PALETTE: Explicitly require this exact color scheme: "{chosen_palette}".
+   - VERIFIED TEXT OVERLAY: Require massive, ultra-clean 3D cinematic typography on the left side in bold yellow and white font reading the exact verified English hook: "{chosen_thumb_hook['text']}" (spell every letter identically, maximum 3 words, no extra words on the image).
+   - Explicitly specify: "Photorealistic 8k medical documentary thumbnail, 16:9 widescreen aspect ratio, dramatic rim lighting, razor-sharp focus, ultra-high CTR composition."
+
+3. "description_intro": A compelling 3-sentence SEO paragraph summarizing today's 5 medical breakthroughs in plain, exciting English for the top of the YouTube description box.
+4. "tags": A comma-separated string of 18 high-traffic English YouTube SEO tags focused on new medications, vitamins, organ health, chronic disease cures, and medical news.
+
+Return ONLY valid JSON matching this exact structure (no markdown formatting outside JSON):
+{{
+  "youtube_titles": [
+    "Title Option 1 (100% about Hero Story #{hero_story_num}, starting with high-volume search keywords)",
+    "Title Option 2 (Hero Story #{hero_story_num} + another breakthrough from today)",
+    "Title Option 3 (3 high-demand health breakthroughs from today)"
+  ],
+  "thumbnail_prompt": "Detailed 16:9 thumbnail prompt 100% synchronized with Title Option 1...",
+  "description_intro": "3-sentence SEO summary...",
+  "tags": "tag1, tag2, tag3...",
+  "intro": {{
+    "narration": "...",
+    "lower_third": "MEDPULSE 5: DAILY HEALTH BRIEFING",
+    "search_queries": ["doctor smiling clinic", "medical laboratory capsules", "healthy family outdoors"]
+  }},
+  "stories": [
+    {{
+      "story_number": 1,
+      "chapter_title": "...",
+      "source_url": "...",
+      "acts": [
+        {{
+          "act_type": "What This Means For Your Body",
+          "narration": "...",
+          "lower_third": "...",
+          "search_queries": ["...", "...", "..."]
+        }},
+        {{
+          "act_type": "How The Treatment Or Vitamin Works",
+          "narration": "...",
+          "lower_third": "...",
+          "search_queries": ["...", "...", "..."]
+        }},
+        {{
+          "act_type": "Inside The Clinical Proof",
+          "narration": "...",
+          "lower_third": "...",
+          "search_queries": ["...", "...", "..."]
+        }},
+        {{
+          "act_type": "Your Practical Health Takeaway",
+          "narration": "...",
+          "lower_third": "...",
+          "search_queries": ["...", "...", "..."]
+        }}
+      ]
+    }}
+  ],
+  "outro": {{
+    "narration": "...",
+    "lower_third": "SUBSCRIBE TO MEDPULSE 5",
+    "search_queries": ["doctor shaking hands patient", "happy healthy seniors walking", "modern hospital sunrise"]
+  }}
+}}
+"""
 
     models_to_try = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]
     for model_name in models_to_try:
         for attempt in range(3):
             try:
                 print(f"Requesting script from {model_name} (Attempt {attempt+1})...")
-                response = client.models.generate_content(
-                    model=model_name,
-                    contents=prompt,
-                )
+                try:
+                    response = client.models.generate_content(
+                        model=model_name,
+                        contents=prompt,
+                        config={"response_mime_type": "application/json"}
+                    )
+                except Exception:
+                    response = client.models.generate_content(
+                        model=model_name,
+                        contents=prompt,
+                    )
                 raw_text = clean_json_text(response.text)
                 data = json.loads(raw_text)
-                if "stories" in data and len(data["stories"]) == 5:
-                    thumb_p = data.get("thumbnail_prompt", "").strip()
-                    if chosen_thumb_hook["text"] not in thumb_p:
-                        thumb_p += f' Massive bold 3D yellow and white text on the left side reading "{chosen_thumb_hook["text"]}".'
-                    if "16:9" not in thumb_p:
-                        thumb_p += " Photorealistic 8k 16:9 widescreen medical thumbnail."
-                    data["thumbnail_prompt"] = thumb_p
-                    data["synchronized_hero_story_number"] = hero_story_num
-                    data["synchronized_thumb_hook"] = chosen_thumb_hook["text"]
-                    print("Successfully generated and validated synchronized TV-host script JSON!")
-                    return data
+                data = validate_and_repair_script_data(data, stories)
+
+                thumb_p = data.get("thumbnail_prompt", "").strip()
+                if chosen_thumb_hook["text"] not in thumb_p:
+                    thumb_p += f' Massive bold 3D yellow and white text on the left side reading "{chosen_thumb_hook["text"]}".'
+                if "16:9" not in thumb_p:
+                    thumb_p += " Photorealistic 8k 16:9 widescreen medical thumbnail."
+                data["thumbnail_prompt"] = thumb_p
+                data["synchronized_hero_story_number"] = hero_story_num
+                data["synchronized_thumb_hook"] = chosen_thumb_hook["text"]
+                print("Successfully generated and validated synchronized TV-host script JSON!")
+                return data
             except Exception as e:
                 print(f"Error with {model_name} (attempt {attempt+1}): {e}")
                 time.sleep(4)
 
     raise RuntimeError("Failed to generate valid script JSON from Gemini after all retries.")
 
+# ==========================================
+# 5. VOICEOVER GENERATION (EDGE-TTS WITH TIMEOUT)
+# ==========================================
 VOICE_NAME = "en-US-ChristopherNeural"
+FALLBACK_VOICE_NAME = "en-US-GuyNeural"
 
-async def _synthesize_async(text, out_path):
-    communicate = edge_tts.Communicate(text, VOICE_NAME, rate="+4%", pitch="-1Hz")
-    await asyncio.wait_for(communicate.save(out_path), timeout=40.0)
+async def _synthesize_async(text, out_path, voice_to_use):
+    communicate = edge_tts.Communicate(text, voice_to_use, rate="+4%", pitch="-1Hz")
+    await asyncio.wait_for(communicate.save(out_path), timeout=45.0)
 
 def generate_voiceover(text, out_path):
-    clean_text = re.sub(r'\s+', ' ', text).strip()
-    for attempt in range(5):
+    clean_text = re.sub(r'\s+', ' ', str(text)).strip()
+    for attempt in range(6):
+        voice_to_use = VOICE_NAME if attempt < 4 else FALLBACK_VOICE_NAME
         try:
-            asyncio.run(_synthesize_async(clean_text, out_path))
+            asyncio.run(_synthesize_async(clean_text, out_path, voice_to_use))
             if os.path.exists(out_path) and os.path.getsize(out_path) > 1000:
                 return out_path
         except Exception as e:
-            print(f"TTS attempt {attempt+1} failed: {e}")
-            time.sleep(2)
+            print(f"TTS attempt {attempt+1} ({voice_to_use}) failed: {e}")
+            time.sleep(2 * (attempt + 1))
     raise RuntimeError(f"Failed to synthesize voiceover for: {out_path}")
 
+# ==========================================
+# 6. PEXELS HD MULTI-CLIP FETCHER & FAST ANTI-FREEZE NORMALIZER
+# ==========================================
 def normalize_clip_hd(input_path, output_path):
     cmd = [
         "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
@@ -531,6 +724,9 @@ def search_and_download_pexels_clips(queries, needed_count, scene_prefix):
 
     return downloaded_norm_paths
 
+# ==========================================
+# 7. GRAPHICS: PIL OVERLAYS, LOGO & BUMPERS
+# ==========================================
 def get_font(size, bold=True):
     font_candidates = [
         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
@@ -587,8 +783,8 @@ def create_lower_third_overlay(headline_text, sub_label="MEDPULSE 5  |  CLINICAL
     font_sub = get_font(15, bold=True)
     font_main = get_font(22, bold=True)
 
-    draw.text((bar_x + 24, bar_y + 11), sub_label.upper(), font=font_sub, fill=(0, 215, 255, 255))
-    clean_headline = headline_text.strip()[:56]
+    draw.text((bar_x + 24, bar_y + 11), str(sub_label).upper(), font=font_sub, fill=(0, 215, 255, 255))
+    clean_headline = str(headline_text).strip()[:56]
     draw.text((bar_x + 24, bar_y + 36), clean_headline, font=font_main, fill=(255, 255, 255, 255))
 
     return np.array(canvas)
@@ -611,7 +807,7 @@ def create_chapter_bumper_frame(story_num, chapter_title):
     tag_text = f"MEDICAL BREAKTHROUGH  #{story_num}"
     draw.text((140, 245), tag_text, font=font_tag, fill=(0, 220, 255))
 
-    words = chapter_title.split()
+    words = str(chapter_title).split()
     lines = []
     curr = ""
     for w in words:
@@ -668,6 +864,9 @@ def generate_bumper_chime(output_wav_path, duration_sec=2.4):
         wf.writeframes(pcm.tobytes())
     return output_wav_path
 
+# ==========================================
+# 8. SCENE BUILDER (GUARANTEED NO FROZEN FRAMES)
+# ==========================================
 LOGO_ARRAY = create_circular_logo_overlay(LOGO_PATH)
 
 def build_spoken_scene(narration_text, lower_third_text, sub_label, search_queries, scene_prefix):
@@ -719,6 +918,9 @@ def build_chapter_bumper(story_num, chapter_title, chime_path):
     comp = CompositeVideoClip([img_clip, logo_clip], size=(1280, 720)).set_duration(dur).set_audio(chime_audio)
     return comp, dur
 
+# ==========================================
+# 9. MASTER PIPELINE & YOUTUBE PACKAGING
+# ==========================================
 def format_timestamp(seconds):
     m = int(seconds // 60)
     s = int(seconds % 60)
@@ -735,8 +937,9 @@ def main():
     current_time = 0.0
     timestamps = []
 
+    # 1. Intro
     print("Building Intro scene...")
-    timestamps.append("00:00 What New Medical Breakthroughs Mean For Your Body")
+    timestamps.append(f"00:00 What New Medical Breakthroughs Mean For Your Body")
     intro_data = script_data["intro"]
     intro_clip, intro_dur = build_spoken_scene(
         intro_data["narration"],
@@ -748,6 +951,7 @@ def main():
     all_scene_clips.append(intro_clip)
     current_time += intro_dur
 
+    # 2. 5 Stories (Each has Bumper + 4 Acts)
     for s_idx, story in enumerate(script_data["stories"], 1):
         ch_title = story.get("chapter_title", f"Medical Breakthrough #{s_idx}")
         timestamps.append(f"{format_timestamp(current_time)} Story #{s_idx}: {ch_title}")
@@ -772,6 +976,7 @@ def main():
             all_scene_clips.append(sc_clip)
             current_time += sc_dur
 
+    # 3. Outro
     print("Building Outro scene...")
     timestamps.append(f"{format_timestamp(current_time)} Your Daily Health Takeaway & Question of the Day")
     outro_data = script_data["outro"]
@@ -789,6 +994,7 @@ def main():
 
     final_voice_video = concatenate_videoclips(all_scene_clips, method="compose")
 
+    # Background ambient music at low volume (5%)
     bg_wav = "temp_Media/ambient_bg.wav"
     generate_ambient_background_music(bg_wav, duration_sec=60)
     bg_music = AudioFileClip(bg_wav)
@@ -817,12 +1023,14 @@ def main():
         ]
     )
 
+    # Save used news ONLY after video succeeds
     new_used_items = []
     for s in stories:
         new_used_items.append(s["link"])
         new_used_items.append(s["norm_title"])
     save_to_set(USED_NEWS_FILE, new_used_items)
 
+    # Generate YouTube Metadata Package
     yt_titles = script_data.get("youtube_titles", [
         "New Pill & Organ Repair: 5 Medical Breakthroughs Changing Healthcare",
         "1 Daily Vitamin & New Treatments That Reverse Chronic Disease",
@@ -838,71 +1046,66 @@ def main():
     sync_hook = script_data.get("synchronized_thumb_hook", "ONE DAILY PILL?")
 
     sources_block = "\n".join([
-        f"- Story #{i}: {s['title']}\n  Source: {s['link']}"
+        f"• Story #{i}: {s['title']}\n  Source: {s['link']}"
         for i, s in enumerate(stories, 1)
     ])
     chapters_block = "\n".join(timestamps)
 
-    sep = "=" * 68
-    t1 = yt_titles[0] if len(yt_titles) > 0 else "New Pill & Organ Repair: 5 Medical Breakthroughs For Your Body"
-    t2 = yt_titles[1] if len(yt_titles) > 1 else "Reversing Organ Damage & New Treatments: 5 Health Breakthroughs"
-    t3 = yt_titles[2] if len(yt_titles) > 2 else "New Medications, Vitamins & Cures Changing Modern Medicine"
+    details_content = f"""====================================================================
+🎬 3 عناوين مقترحة للفيديو (مرتبة حسب قوة البحث في يوتيوب - انسخ واحداً منها)
+====================================================================
+الخيار 1 (موصى به - متطابق 100% مع الصورة المصغرة وخبر القصة رقم #{hero_num}):
+{yt_titles[0] if len(yt_titles) > 0 else 'New Pill & Organ Repair: 5 Medical Breakthroughs For Your Body'}
 
-    details_lines = [
-        sep,
-        "3 عناوين مقترحة للفيديو (مرتبة حسب قوة البحث في يوتيوب - انسخ واحداً منها)",
-        sep,
-        f"الخيار 1 (موصى به - متطابق 100% مع الصورة المصغرة وخبر القصة رقم #{hero_num}):",
-        t1,
-        "",
-        "الخيار 2:",
-        t2,
-        "",
-        "الخيار 3:",
-        t3,
-        "",
-        "",
-        sep,
-        "وصف الصورة المصغرة (مربوط برمجياً بالخيار 1 الموصى به)",
-        f'(العبارة المعتمدة داخل الصورة: "{sync_hook}")',
-        "(انسخه وضعه في موقع توليد الصور المجاني واختر مقاس عرضي 16:9)",
-        sep,
-        thumb_prompt,
-        "",
-        "",
-        sep,
-        "صندوق الوصف الكامل الجاهز للنسخ واللصق في يوتيوب",
-        sep,
-        desc_intro,
-        "",
-        "In today's episode of MedPulse 5, we break down five exciting medical breakthroughs—covering new pills and medications, vitamin and nutrition science, stubborn disease treatments, and ways to protect and repair your vital organs.",
-        "",
-        "VIDEO CHAPTERS (TIMESTAMPS):",
-        chapters_block,
-        "",
-        "CLINICAL SOURCES & FURTHER READING:",
-        sources_block,
-        "",
-        "MEDICAL DISCLAIMER:",
-        "The content on MedPulse 5 is for educational and informational purposes only and is not a substitute for professional medical advice, diagnosis, or treatment. Always consult a qualified healthcare provider with any questions you may have regarding a medical condition, medication, or supplement.",
-        "",
-        "Subscribe to MedPulse 5 for your daily briefing on medical breakthroughs, new treatments, vitamins, and healthy longevity!",
-        "",
-        "#MedicalBreakthroughs #HealthNews #NewMedications #Vitamins #OrganHealth #MedPulse5",
-        "",
-        "",
-        sep,
-        "الكلمات المفتاحية الجاهزة للنسخ واللصق في قسم العلامات",
-        sep,
-        tags_str,
-        ""
-    ]
+الخيار 2:
+{yt_titles[1] if len(yt_titles) > 1 else 'Reversing Organ Damage & New Treatments: 5 Health Breakthroughs'}
+
+الخيار 3:
+{yt_titles[2] if len(yt_titles) > 2 else 'New Medications, Vitamins & Cures Changing Modern Medicine'}
+
+
+====================================================================
+🎨 وصف الصورة المصغرة (Thumbnail Prompt - مربوط برمجياً بالخيار 1 الموصى به)
+(العبارة المعتمدة داخل الصورة: "{sync_hook}")
+(انسخه وضعه في موقع توليد الصور المجاني واختر مقاس عرضي 16:9 Landscape)
+====================================================================
+{thumb_prompt}
+
+
+====================================================================
+📝 صندوق الوصف الكامل الجاهز للنسخ واللصق في يوتيوب (YouTube Description)
+====================================================================
+{desc_intro}
+
+In today's episode of MedPulse 5, we break down five exciting medical breakthroughs—covering new pills and medications, vitamin and nutrition science, stubborn disease treatments, and ways to protect and repair your vital organs.
+
+⏱️ VIDEO CHAPTERS (TIMESTAMPS):
+{chapters_block}
+
+🔬 CLINICAL SOURCES & FURTHER READING:
+{sources_block}
+
+⚠️ MEDICAL DISCLAIMER:
+The content on MedPulse 5 is for educational and informational purposes only and is not a substitute for professional medical advice, diagnosis, or treatment. Always consult a qualified healthcare provider with any questions you may have regarding a medical condition, medication, or supplement.
+
+🔔 Subscribe to MedPulse 5 for your daily briefing on medical breakthroughs, new treatments, vitamins, and healthy longevity!
+
+#MedicalBreakthroughs #HealthNews #NewMedications #Vitamins #OrganHealth #MedPulse5
+
+
+====================================================================
+🏷️ الكلمات المفتاحية الجاهزة للنسخ واللصق في قسم العلامات (YouTube Tags)
+====================================================================
+{tags_str}
+"""
 
     details_path = "output/youtube_details.txt"
     with open(details_path, "w", encoding="utf-8") as f:
-        f.write("\n".join(details_lines))
+        f.write(details_content)
 
     print("Successfully created output/final_video.mp4 and output/youtube_details.txt!")
 
 if __name__ == "__main__":
     main()
+
+
