@@ -1,15 +1,17 @@
-name: Daily Medical Video Generator
+name: Medical AI Video Generator
 
 on:
+  schedule:
+    - cron: '30 15 * * *'
   workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
-  build_video:
+  build_and_publish:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 45
 
     steps:
       - name: Checkout Repository
@@ -18,40 +20,43 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.10"
+          python-version: '3.10'
 
       - name: Install System Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg fonts-dejavu-core fonts-liberation
+          sudo apt-get install -y ffmpeg fonts-liberation fonts-dejavu-core
 
-      - name: Install Python Libraries
+      - name: Install Python Packages
         run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install --upgrade pip
+          pip install google-generativeai requests feedparser edge-tts moviepy==1.0.3 imageio-ffmpeg pillow numpy
 
-      - name: Run Medical AI Agent
+      - name: Run AI Video Agent
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
         run: |
           python main.py
+          ls -lh output/
 
-      - name: Save Used News and Videos History
+      - name: Save Anti-Duplication Memory
         run: |
           git config --local user.email "actions@github.com"
           git config --local user.name "GitHub Actions"
-          touch used_news.txt used_videos.txt
-          git add used_news.txt used_videos.txt
-          git diff --staged --quiet || git commit -m "Update used news and video clips history"
-          git push
+          git add used_news.txt used_videos.txt || true
+          git diff --staged --quiet || git commit -m "Update used news and videos memory"
+          git push || true
 
-      - name: Create Release with Video and Details
+      - name: Publish Videos and Details to Releases
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: video-${{ github.run_number }}
-          name: "MedPulse 5 Episode #${{ github.run_number }}"
-          body: "Automated HD Medical Video and YouTube Metadata"
+          tag_name: episode-${{ github.run_number }}
+          name: "MedPulse 5 - Episode #${{ github.run_number }}"
+          body: "Automated 9-10 Min Clinical Deep Dive + Companion YouTube Short + SEO Metadata"
           files: |
-            final_video.mp4
-            youtube_details.txt
+            output/final_video.mp4
+            output/short_video.mp4
+            output/youtube_details.txt
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
