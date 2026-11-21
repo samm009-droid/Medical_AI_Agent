@@ -4,11 +4,9 @@ import requests, feedparser, edge_tts, numpy as np
 from PIL import Image, ImageDraw, ImageFont
 import PIL.Image
 
-if not hasattr(PIL.Image, "ANTIALIAS"):
-    PIL.Image.ANTIALIAS = PIL.Image.LANCZOS
+setattr(PIL.Image, "ANTIALIAS", getattr(PIL.Image, "LANCZOS", PIL.Image.BICUBIC))
 
-from google import genai
-from google.genai import types
+import google.generativeai as genai
 from moviepy.editor import (
     VideoFileClip, AudioFileClip, ImageClip, ColorClip,
     CompositeVideoClip, CompositeAudioClip, concatenate_videoclips
@@ -131,7 +129,7 @@ STOP_WORDS = {
     "between", "both", "could", "doctors", "during", "early", "every", "found",
     "from", "health", "helps", "human", "into", "large", "level", "levels",
     "linked", "lower", "makes", "medical", "might", "more", "newly", "other",
-    "people", "patients", "research", "researchers", "results", " reveals",
+    "people", "patients", "research", "researchers", "results", "reveals",
     "scientist", "scientists", "shows", "shown", "small", "study", "studies",
     "their", "there", "these", "those", "through", "treatment", "under",
     "using", "while", "without", "would", "years", "clinical", "trial"
@@ -141,7 +139,7 @@ def load_Circular_Logo(path, size=68):
     if not os.path.exists(path):
         return None
     try:
-        img = Image.open(path).convert("RGBA").resize((size, size), Image.LANCZOS)
+        img = Image.open(path).convert("RGBA").resize((size, size), PIL.Image.LANCZOS)
         mask = Image.new("L", (size, size), 0)
         ImageDraw.Draw(mask).ellipse((0, 0, size - 1, size - 1), fill=255)
         out = Image.new("RGBA", (size + 8, size + 8), (0, 0, 0, 0))
@@ -452,7 +450,7 @@ CRITICAL RULES:
 Return ONLY valid JSON:
 {{
   "title_options": ["Option 1", "Option 2", "Option 3"],
-  "thumbnail_prompt": " prompt ",
+  "thumbnail_prompt": "prompt",
   "intro_hook": "52-60 words",
   "chapters": [
     {{
@@ -481,19 +479,19 @@ Return ONLY valid JSON:
   }}
 }}
 """
-    client = genai.Client(api_key=GEMINI_API_KEY)
+    genai.configure(api_key=GEMINI_API_KEY)
     for model_name in ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]:
         for attempt in range(2):
             try:
                 print(f"Generating Leonid Kim MD script with {model_name} (attempt {attempt + 1})...")
-                res = client.models.generate_content(
-                    model=model_name,
-                    contents=prompt,
-                    config=types.GenerateContentConfig(response_mime_type="application/json", temperature=0.65)
-                )
-                raw_text = res.text.strip()
+                model = genai.GenerativeModel(model_name)
+                res = model.generate_content(prompt, generation_config={"temperature": 0.65})
+                raw_text = (res.text or "").strip()
                 raw_text = re.sub(r"^```(?:json)?", "", raw_text).strip()
                 raw_text = re.sub(r"```$", "", raw_text).strip()
+                s_idx, e_idx = raw_text.find("{"), raw_text.rfind("}")
+                if s_idx != -1 and e_idx != -1:
+                    raw_text = raw_text[s_idx:e_idx + 1]
                 parsed = json.loads(raw_text)
                 return validate_and_repair_script_data(parsed, topic)
             except Exception as e:
