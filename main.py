@@ -542,7 +542,7 @@ def loop_or_trim_clip(clip_path, target_duration, w=W, h=H):
             if c.duration and c.duration > 1.0:
                 if c.duration < target_duration:
                     n = int(math.ceil(target_duration / c.duration)) + 1
-                     looped = concatenate_videoclips([c] * n)
+                    looped = concatenate_videoclips([c] * n)
                     return looped.subclip(0, target_duration), [c]
                 return c.subclip(0, target_duration), [c]
         except Exception:
