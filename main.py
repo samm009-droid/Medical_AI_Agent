@@ -20,7 +20,7 @@ SHORT_W, SHORT_H = 720, 1280
 FPS = 24
 
 VOICE_NAME = "en-US-ChristopherNeural"
-VOICE_RATE = "-7%"
+VOICE_RATE = "-5%"
 VOICE_PITCH = "-2Hz"
 
 USED_VIDEOS_FILE = "used_videos.txt"
@@ -30,64 +30,100 @@ LOGO_PATH = "\u062a\u0646\u0632\u064a\u0644.jpeg"
 os.makedirs("temp", exist_ok=True)
 os.makedirs("output", exist_ok=True)
 
-DR_BERG_CURATED_TOPICS = [
-    {"title": "What Happens to Your Body When You Chew 1 Clove Daily for 7 Days", "symptom": "bloating, gum inflammation, sluggish digestion, and morning fatigue", "root": "eugenol oil activating digestive enzymes, lowering oral bacteria, and calming gut inflammation", "visual": "spices herbs healthy nutrition kitchen table"},
-    {"title": "Why You Wake Up Between 2 AM and 3 AM Every Night (The Cortisol & Liver Secret)", "symptom": "sudden nighttime waking, racing thoughts, and unrefreshing sleep", "root": "late-night blood sugar drop triggering a cortisol spike and sluggish liver glycogen regulation", "visual": "person sleeping peacefully bedroom night rest"},
-    {"title": "7 Warning Signs of a Fatty Liver That Show Up on Your Skin and Feet", "symptom": "right shoulder ache, red palms, cracked heels, and stubborn belly fat", "root": "congested bile ducts and visceral fat accumulation inside liver cells blocking detoxification", "visual": "doctor examining abdominal scan medical clinic"},
-    {"title": "What Drinking Apple Cider Vinegar Before Bed Does to Your Blood Sugar", "symptom": "high morning fasting glucose, cravings after dinner, and slow metabolism", "root": "acetic acid improving insulin sensitivity in muscle cells and slowing stomach starch breakdown", "visual": "healthy drink glass lemon nutrition kitchen"},
-    {"title": "Tingling and Numbness in Hands and Feet: The Hidden Vitamin Deficiency", "symptom": "pins and needles in toes, burning feet at night, and weak grip", "root": "myelin nerve sheath erosion from low Vitamin B1 (Benfotiamine) and Vitamin B12 absorption", "visual": "vitamin supplement capsules medicine bottle table"},
-    {"title": "Why Taking Vitamin D3 Alone Can Be Dangerous Without Vitamin K2 and Magnesium", "symptom": "stiff joints, muscle cramps, and fatigue despite taking Vitamin D", "root": "unactivated vitamin D leaving calcium in soft arteries instead of directing it into bone matrix", "visual": "golden vitamin capsules healthy lifestyle sunlight"},
-    {"title": "The #1 Mineral Deficiency Behind High Blood Pressure and Night Leg Cramps", "symptom": "throbbing pulse in ears, tight calves at night, and afternoon exhaustion", "root": "intracellular potassium and magnesium depletion stiffening arterial smooth muscle walls", "visual": "doctor checking patient blood pressure clinic"},
-    {"title": "5 Silent Signs of Insulin Resistance Most People Ignore Until It Is Too Late", "symptom": "skin tags on neck, dark skin folds, afternoon sleepiness after meals, and belly fat", "root": "chronically elevated insulin locking fat inside cells and blocking cellular energy uptake", "visual": "patient checking blood sugar glucose meter"},
-    {"title": "Why Your Stomach Bloats Immediately After Eating (It Is Not Too Much Acid)", "symptom": "tightness after meals, burping, heartburn, and undigested food sensation", "root": "low stomach acid failing to trigger the lower esophageal valve and pancreatic enzyme release", "visual": "healthy fresh vegetables gut health food"},
-    {"title": "What Happens When You Drink Turmeric and Black Pepper Water Every Morning", "symptom": "morning joint stiffness, swollen fingers, and brain fog", "root": "curcumin enhanced by piperine downregulating inflammatory cytokines and supporting liver bile", "visual": "healthy herbal tea cup fresh ingredients"},
-    {"title": "Cracked Heels, Brittle Nails, and Hair Thinning: What Your Body Is Begging For", "symptom": "dry split heels, vertical nail ridges, and outer eyebrow thinning", "root": "subclinical sluggish thyroid conversion, low trace minerals (zinc and selenium), and Vitamin B3", "visual": "healthy nutrition seeds nuts vitamins table"},
-    {"title": "The Best Type of Magnesium for Deep Sleep, Anxiety, and Muscle Recovery", "symptom": "restless legs, difficulty falling asleep, and daytime tension", "root": "magnesium glycinate crossing the blood-brain barrier to calm excitatory NMDA receptors", "visual": "supplement capsules glass of water bedroom"},
-    {"title": "How to Flush Uric Acid, Prevent Kidney Stones, and Protect Kidney Filtration", "symptom": "stiff big toe, lower back dull ache, and foamy or dark morning urine", "root": "fructose and purine overload acidifying urine while low citrate allows crystal formation", "visual": "fresh lemon water hydration healthy kidney"},
-    {"title": "Cold Hands and Feet All the Time? The Hidden Thyroid and Iron Connection", "symptom": "icy fingers indoors, pale nail beds, and sluggish morning energy", "root": "impaired peripheral microcirculation from low ferritin stores and slow T4-to-T3 hormone conversion", "visual": "doctor consulting patient in modern clinic"},
-    {"title": "What Happens to Your Body After 16 Hours of Intermittent Fasting (Autophagy)", "symptom": "stubborn weight plateau, brain fog, and sluggish cellular recovery", "root": "insulin dropping low enough to switch on cellular self-cleaning autophagy and growth hormone", "visual": "healthy lifestyle fitness clock nutrition"}
-]
-
-RSS_FEEDS = [
-    "https://news.google.com/rss/search?q=vitamin+deficiency+OR+magnesium+OR+vitamin+D+symptoms+when:7d&hl=en-US&gl=US&ceid=US:en",
-    "https://news.google.com/rss/search?q=fatty+liver+OR+insulin+resistance+OR+blood+sugar+signs+when:7d&hl=en-US&gl=US&ceid=US:en",
-    "https://news.google.com/rss/search?q=gut+health+OR+bloating+OR+sleep+cortisol+natural+remedy+when:7d&hl=en-US&gl=US&ceid=US:en",
-    "https://news.google.com/rss/search?q=high+blood+pressure+OR+cholesterol+OR+kidney+health+diet+when:7d&hl=en-US&gl=US&ceid=US:en",
+LIVE_TREND_FEEDS = [
+    "https://trends.google.com/trending/rss?geo=US",
+    "https://trends.google.com/trending/rss?geo=GB",
+    "https://news.google.com/rss/search?q=symptoms+OR+deficiency+OR+remedy+OR+vitamin+health+when:1d&hl=en-US&gl=US&ceid=US:en",
+    "https://news.google.com/rss/search?q=fatty+liver+OR+insulin+resistance+OR+blood+sugar+OR+cortisol+when:1d&hl=en-US&gl=US&ceid=US:en",
+    "https://news.google.com/rss/search?q=magnesium+OR+vitamin+D+OR+omega+3+OR+gut+bloating+when:1d&hl=en-US&gl=US&ceid=US:en",
+    "https://news.google.com/rss/search?q=blood+pressure+OR+cholesterol+OR+arteries+OR+kidney+health+when:1d&hl=en-US&gl=US&ceid=US:en",
+    "https://news.google.com/rss/search?q=sleep+insomnia+OR+chronic+fatigue+OR+inflammation+diet+when:1d&hl=en-US&gl=US&ceid=US:en",
+    "https://news.google.com/rss/search?q=new+study+health+nutrition+metabolism+longevity+when:1d&hl=en-US&gl=US&ceid=US:en",
     "https://www.health.harvard.edu/blog/feed",
     "https://health.clevelandclinic.org/feed/",
     "https://www.medicalnewstoday.com/rss",
-    "https://www.healthline.com/rss/health-news"
+    "https://www.healthline.com/rss/health-news",
+    "https://www.drugs.com/feeds/medical_news.xml",
+    "https://www.sciencedaily.com/rss/health_medicine/nutrition.xml"
 ]
 
-SECTION_ROLES = [
-    "The Everyday Symptom & Surprising Root Cause",
-    "3 Warning Signs Your Body Sends You",
-    "The Hidden Mechanism Inside Your Body",
-    "Daily Mistakes That Make It Worse",
-    "The Step-by-Step Practical Home Protocol"
+GOOGLE_AUTOCOMPLETE_SEEDS = [
+    "why does my body ",
+    "symptoms of low vitamin ",
+    "what happens if you eat ",
+    "what happens if you drink ",
+    "best natural remedy for ",
+    "how to reverse fatty ",
+    "hidden signs of high ",
+    "why do i wake up ",
+    "best supplement for ",
+    "foods that destroy your "
 ]
 
-SAFE_MEDICAL_QUERIES = [
-    "healthy fresh vegetables herbs and nutrition on table",
-    "vitamin supplement capsules and glass of water",
-    "doctor explaining medical chart to patient in clinic",
-    "close up natural spices turmeric cloves lemon",
-    "person sleeping peacefully in bedroom night rest",
-    "doctor checking patient blood pressure in office",
-    "scientist examining blood sample in laboratory",
-    "healthy Mediterranean food preparation kitchen",
-    "pharmacist organizing supplement bottles pharmacy",
-    "active adult walking outdoors healthy lifestyle"
+HIGH_DEMAND_HEALTH_TERMS = {
+    "vitamin": 8, "magnesium": 9, "deficiency": 9, "symptom": 8, "symptoms": 8,
+    "liver": 9, "fatty liver": 10, "kidney": 8, "insulin": 9, "blood sugar": 10,
+    "diabetes": 8, "cholesterol": 8, "blood pressure": 9, "artery": 8, "heart": 7,
+    "sleep": 8, "cortisol": 9, "bloating": 9, "gut": 8, "stomach": 7, "acid": 7,
+    "inflammation": 9, "joint": 7, "nerve": 8, "tingling": 9, "numbness": 9,
+    "fatigue": 8, "tired": 8, "thyroid": 8, "metabolism": 8, "fasting": 8,
+    "clove": 8, "turmeric": 8, "vinegar": 8, "lemon": 7, "ginger": 7, "garlic": 7,
+    "omega": 8, "collagen": 7, "potassium": 8, "zinc": 7, "iron": 7, "b12": 9
+}
+
+SAFE_LANDSCAPE_QUERIES = [
+    "doctor explaining medical chart to patient in bright clinic",
+    "healthy fresh vegetables herbs and natural nutrition on table",
+    "close up vitamin supplement capsules and glass of water",
+    "scientist examining blood sample tube in medical laboratory",
+    "doctor checking patient blood pressure in modern hospital",
+    "healthy Mediterranean diet fresh food preparation in kitchen",
+    "close up natural spices turmeric ginger lemon herbal tea",
+    "pharmacist organizing prescription bottles in pharmacy",
+    "medical researcher looking through microscope in lab",
+    "active person walking outdoors in morning sunlight health",
+    "person sleeping peacefully in bedroom night rest recovery",
+    "nutritionist consulting patient with healthy foodon desk"
+]
+
+SAFE_PORTRAIT_QUERIES = [
+    "healthy fresh food nutrition vertical",
+    "doctor medical clinic consultation vertical",
+    "fitness healthy lifestyle morning routine",
+    "vitamin capsules glass of water health",
+    "fresh lemon herbal tea healthy drink",
+    "laboratory scientist medical research"
+]
+
+KEYWORD_VISUAL_MAP = [
+    (["liver", "bile", "detox", "abdomen", "visceral"], "doctor examining abdominal ultrasound scan in clinic"),
+    (["kidney", "urine", "uric", "stone", "filtration", "water"], "fresh lemon water hydration glass on table"),
+    (["heart", "artery", "plaque", "cholesterol", "blood pressure", "pulse"], "cardiologist checking patient blood pressure monitor"),
+    (["sugar", "glucose", "insulin", "diabetes", "pancreas", "carb"], "patient checking blood sugar meter with doctor"),
+    (["vitamin", "supplement", "magnesium", "zinc", "b12", "capsule", "pill"], "close up golden vitamin supplement capsules on table"),
+    (["gut", "stomach", "bloat", "acid", "digestion", "intestine", "microbiome"], "healthy fresh vegetables fiber rich nutrition food"),
+    (["herb", "spice", "clove", "turmeric", "ginger", "garlic", "tea", "vinegar"], "natural herbs spices and warm herbal tea in kitchen"),
+    (["sleep", "wake", "night", "insomnia", "cortisol", "stress", "tired", "fatigue"], "person sleeping peacefully in dark bedroom night"),
+    (["nerve", "tingling", "numb", "hand", "foot", "cramp", "muscle", "joint"], "physical therapist doctor examining patient hand and leg"),
+    (["cell", "blood", "hormone", "enzyme", "receptor", "inflammation", "immune"], "scientist analyzing blood sample under microscope lab")
 ]
 
 THUMBNAIL_PALETTES = [
-    {"glow": "vibrant emerald green and warm gold", "accent": "bright yellow"},
-    {"glow": "deep crimson red and clinical cyan", "accent": "crisp white"},
-    {"glow": "warm amber orange and dark navy blue", "accent": "neon yellow"},
-    {"glow": "royal teal and bright coral", "accent": "warm gold"}
+    {"glow": "emerald green and golden yellow", "accent": "bright yellow"},
+    {"glow": "crimson red and icy cyan", "accent": "crisp white"},
+    {"glow": "warm amber and deep cobalt blue", "accent": "neon yellow"},
+    {"glow": "clinical teal and fiery orange", "accent": "warm gold"}
 ]
 
-def load_Circular_Logo(path, size=64):
+STOP_WORDS = {
+    "about", "after", "again", "against", "because", "before", "between", "could",
+    "during", "every", "found", "health", "human", "large", "level", "levels",
+    "medical", "might", "other", "people", "patients", "research", "results",
+    "shows", "study", "studies", "their", "there", "these", "those", "through",
+    "treatment", "under", "using", "while", "without", "would", "years"
+}
+
+def load_circular_logo(path, size=64):
     if not os.path.exists(path):
         return None
     try:
@@ -101,8 +137,8 @@ def load_Circular_Logo(path, size=64):
     except Exception:
         return None
 
-LOGO_PIL = load_Circular_Logo(LOGO_PATH, size=64)
-LOGO_SHORT_PIL = load_Circular_Logo(LOGO_PATH, size=54)
+LOGO_PIL = load_circular_logo(LOGO_PATH, size=64)
+LOGO_SHORT_PIL = load_circular_logo(LOGO_PATH, size=54)
 
 def load_font(size, bold=True):
     candidates = [
@@ -117,13 +153,13 @@ def load_font(size, bold=True):
                 pass
     return ImageFont.load_default()
 
-def load_used_items(filepath, max_keep=500):
+def load_used_items(filepath, max_keep=600):
     if not os.path.exists(filepath):
         return []
     with open(filepath, "r", encoding="utf-8") as f:
         return [line.strip() for line in f if line.strip()][-max_keep:]
 
-def save_used_items(filepath, items, max_keep=500):
+def save_used_items(filepath, items, max_keep=600):
     with open(filepath, "w", encoding="utf-8") as f:
         for item in items[-max_keep:]:
             f.write(f"{item}\n")
@@ -132,60 +168,247 @@ def clean_text_for_tts(text):
     text = re.sub(r"[*_#`~>]", " ", str(text))
     return re.sub(r"\s+", " ", text).strip()
 
-def select_dr_berg_trending_topic():
-    print("Scanning live patient search trends & Dr. Berg symptom-to-root-cause matrix...")
-    used_news = set(load_used_items(USED_NEWS_FILE))
-    trend_words = {}
-    headers = {"User-Agent": "Mozilla/5.0"}
-    for url in RSS_FEEDS:
+def fetch_live_google_autocomplete_trends():
+    suggestions = []
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+    for seed in random.sample(GOOGLE_AUTOCOMPLETE_SEEDS, min(6, len(GOOGLE_AUTOCOMPLETE_SEEDS))):
         try:
-            r = requests.get(url, headers=headers, timeout=10)
+            url = f"https://suggestqueries.google.com/complete/search?client=firefox&hl=en&gl=us&q={urllib.parse.quote(seed)}"
+            r = requests.get(url, headers=headers, timeout=8)
             if r.status_code == 200:
-                feed = feedparser.parse(r.content)
-                for entry in feed.entries[:15]:
-                    txt = (entry.get("title", "") + " " + entry.get("summary", "")).lower()
-                    for w in re.findall(r"[a-z]{4,}", txt):
-                        trend_words[w] = trend_words.get(w, 0) + 1
+                data = r.json()
+                if isinstance(data, list) and len(data) > 1 and isinstance(data[1], list):
+                    for s in data[1][:5]:
+                        if isinstance(s, str) and len(s) > 18:
+                            suggestions.append(s.strip())
+        except Exception:
+            continue
+    return suggestions
+
+def fetch_live_google_trend_topic():
+    print("Scanning Real-Time Google Search Trends, Autocomplete & 24h Health Feeds...")
+    used_news = set(load_used_items(USED_NEWS_FILE))
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+    candidates = []
+    word_freq = {}
+
+    live_queries = fetch_live_google_autocomplete_trends()
+    for q in live_queries:
+        for w in re.findall(r"[a-z]{4,}", q.lower()):
+            if w not in STOP_WORDS:
+                word_freq[w] = word_freq.get(w, 0) + 2
+
+    for url in LIVE_TREND_FEEDS:
+        try:
+            r = requests.get(url, headers=headers, timeout=12)
+            if r.status_code != 200:
+                continue
+            feed = feedparser.parse(r.content)
+            for entry in feed.entries[:20]:
+                title = re.sub(r"<[^>]+>", "", entry.get("title", "")).strip()
+                if " - " in title and len(title.split(" - ")[0]) > 24:
+                    title = " - ".join(title.split(" - ")[:-1]).strip()
+                summary = re.sub(r"<[^>]+>", " ", entry.get("summary", entry.get("description", ""))).strip()
+                summary = re.sub(r"\s+", " ", summary)[:500]
+                link = entry.get("link", "").strip()
+                if not title or len(title) < 18:
+                    continue
+                norm_key = re.sub(r"[^a-z0-9]", "", title.lower())[:60]
+                if norm_key in used_news or (link and link in used_news):
+                    continue
+
+                combined = f"{title} {summary}".lower()
+                if any(bad in combined for bad in ["politics", "senate", "election", "lawsuit", "stock market", "murder", "crash"]):
+                    continue
+
+                base_score = 0
+                for term, weight in HIGH_DEMAND_HEALTH_TERMS.items():
+                    if term in combined:
+                        base_score += weight
+                if base_score == 0 and "trends.google.com" in url:
+                    continue
+
+                words = set(re.findall(r"[a-z]{4,}", title.lower())) - STOP_WORDS
+                for w in words:
+                    word_freq[w] = word_freq.get(w, 0) + 1
+
+                candidates.append({
+                    "title": title,
+                    "summary": summary or title,
+                    "link": link or "https://news.google.com",
+                    "norm_key": norm_key,
+                    "words": words,
+                    "base_score": base_score
+                })
         except Exception:
             continue
 
-    scored_topics = []
-    for item in DR_BERG_CURATED_TOPICS:
-        norm_key = re.sub(r"[^a-z0-9]", "", item["title"].lower())[:55]
+    for q in live_queries:
+        norm_key = re.sub(r"[^a-z0-9]", "", q.lower())[:60]
         if norm_key in used_news:
             continue
-        words = re.findall(r"[a-z]{4,}", (item["title"] + " " + item["symptom"] + " " + item["root"]).lower())
-        score = sum(min(trend_words.get(w, 0), 8) for w in set(words)) + random.randint(1, 10)
-        scored_topics.append((score, norm_key, item))
+        q_low = q.lower()
+        b_score = sum(wt for tm, wt in HIGH_DEMAND_HEALTH_TERMS.items() if tm in q_low) + 12
+        words = set(re.findall(r"[a-z]{4,}", q_low)) - STOP_WORDS
+        candidates.append({
+            "title": q.title(),
+            "summary": f"High-volume live Google search query trending today: {q}",
+            "link": "https://trends.google.com",
+            "norm_key": norm_key,
+            "words": words,
+            "base_score": b_score
+        })
 
-    if not scored_topics:
-        chosen = random.choice(DR_BERG_CURATED_TOPICS)
-        norm_key = f"cycle_{int(time.time())}"
-    else:
-        scored_topics.sort(key=lambda x: x[0], reverse=True)
-        _, norm_key, chosen = scored_topics[0]
+    if not candidates:
+        fallback_q = "Why Magnesium, Vitamin D3, and Insulin Resistance Control Your Daily Energy and Organ Repair"
+        return {
+            "title": fallback_q,
+            "summary": "Trending patient search on how mineral deficiencies and elevated insulin trigger fatigue, fatty liver, and nighttime waking.",
+            "link": "https://trends.google.com",
+            "norm_key": f"live_{int(time.time())}",
+            "related_searches": live_queries[:4]
+        }
 
-    chosen["norm_key"] = norm_key
-    print(f"Selected #1 Dr. Berg Single-Topic Deep Dive: {chosen['title']}")
-    return chosen
+    for c in candidates:
+        velocity_bonus = sum(min(word_freq.get(w, 0), 8) * 3 for w in c["words"] if word_freq.get(w, 0) >= 2)
+        c["total_score"] = c["base_score"] + velocity_bonus
+
+    candidates.sort(key=lambda x: x["total_score"], reverse=True)
+    winner = candidates[0]
+    related = []
+    for other in candidates[1:30]:
+        if len(winner["words"] & other["words"]) >= 1 and other["title"] != winner["title"]:
+            related.append(other["title"])
+            if len(related) >= 4:
+                break
+    winner["related_searches"] = related or live_queries[:4]
+    print(f"Selected #1 Live Google Search Trend (Score {winner['total_score']}): {winner['title']}")
+    return winner
 
 def get_thumbnail_spec(topic_title):
     t = topic_title.lower()
-    if "clove" in t or "turmeric" in t or "vinegar" in t:
-        return "DO THIS DAILY", "a hyper-detailed clinical kitchen table with natural herbs, a glowing glass tonic, and an anatomical digestive glow"
-    if "liver" in t:
-        return "FATTY LIVER SIGNS", "an anatomical 3D glowing liver illustration beside fresh lemon water and diagnostic markers"
-    if "sleep" in t or "2 am" in t or "3 am" in t:
-        return "WAKE UP AT 3 AM?", "a glowing digital bedside clock reading 3:00 AM with a calm metabolic hormone wave graphic"
-    if "tingling" in t or "numbness" in t or "heels" in t:
-        return "HIDDEN DEFICIENCY", "a glowing golden vitamin capsule illuminating microscopic nerve fibers in high contrast"
-    if "vitamin d" in t or "magnesium" in t:
-        return "NEVER TAKE ALONE", "three luminous translucent supplement capsules arranged in a golden triangle on a dark clinical desk"
-    if "blood pressure" in t or "insulin" in t or "kidney" in t:
-        return "THE ROOT CAUSE", "a high-contrast clinical blood pressure and metabolic monitor beside natural mineral-rich foods"
-    return "BODY WARNING SIGNS", "a high-contrast clinical illustration of cellular repair and natural nutrients on a dark studio background"
+    if any(w in t for w in ["vitamin", "magnesium", "supplement", "b12", "zinc", "omega"]):
+        return "HIDDEN DEFICIENCY", "glowing golden vitamin capsules beside a high-contrast clinical blood analysis display"
+    if any(w in t for w in ["liver", "kidney", "detox", "bile"]):
+        return "ORGAN WARNING SIGNS", "an anatomical 3D glowing human liver and kidney model with fresh lemon and clinical markers"
+    if any(w in t for w in ["sugar", "insulin", "diabetes", "fasting", "metabolism", "weight"]):
+        return "BLOOD SUGAR TRUTH", "a digital glucose monitor showing a sharp drop beside natural metabolism-boosting foods"
+    if any(w in t for w in ["heart", "pressure", "cholesterol", "artery"]):
+        return "CHECK THIS NOW", "a cinematic macro cross-section of a clean glowing artery and a blood pressure cuff"
+    if any(w in t for w in ["sleep", "wake", "cortisol", "tired", "fatigue"]):
+        return "STOP IGNORING THIS", "a glowing bedside clock at 3:00 AM with a calm cellular energy restoration wave"
+    return "THE ROOT CAUSE", "a dramatic high-contrast medical illustration of cellular repair, natural herbs, and clinical diagnostics"
 
-def validate_and_repair_script(data, topic):
+def pick_visual_queries_for_text(text, count=3):
+    t_low = text.lower()
+    picked = []
+    for kw_list, q in KEYWORD_VISUAL_MAP:
+        if any(k in t_low for k in kw_list) and q not in picked:
+            picked.append(q)
+            if len(picked) >= count:
+                return picked
+    pool = SAFE_LANDSCAPE_QUERIES[:]
+    random.shuffle(pool)
+    for pq in pool:
+        if pq not in picked:
+            picked.append(pq)
+            if len(picked) >= count:
+                break
+    return picked
+
+def generate_dr_berg_masterclass_script(topic):
+    related_str = "\n".join(f"- {r}" for r in topic.get("related_searches", []))
+    prompt = f"""
+You are a world-class medical educator speaking in the exact teaching style of Dr. Eric Berg ('Dr. Berg').
+Today's video is about the #1 LIVE TRENDING HEALTH SEARCH on Google right now:
+
+TRENDING TOPIC / SEARCH: {topic['title']}
+CONTEXT & DETAILS: {topic['summary']}
+RELATED LIVE GOOGLE SEARCHES TODAY:
+{related_str}
+
+YOUR MISSION:
+Transform this #1 trending topic into a deep, comprehensive, example-packed Dr. Berg style masterclass video.
+Do NOT write like a dry academic report or a news anchor. Speak warmly, clearly, and directly to the viewer ('you') like Dr. Berg teaching a patient.
+
+MANDATORY DR. BERG ELEMENTS:
+1. THRILLING, FAST-PACED INTRO HOOK ('intro_hook', 45 to 60 words):
+   - Grab the viewer in the very first second with a surprising question, a hidden symptom they might be feeling right now, or a common myth about this topic, then promise the exact root cause and step-by-step fix.
+2. 6 DEEP, COMPREHENSIVE POINTS ('points', list of 6 objects):
+   - Point 1: The Hidden Symptom & What Most People Get Wrong
+   - Point 2: The Real Root Cause Inside Your Body (Use a vivid everyday analogy like dish soap, a clogged filter, or a rusted lock)
+   - Point 3: Concrete Real-Life Examples & Warning Signs on Your Body
+   - Point 4: How It Affects Your Hormones, Organs & Cellular Energy Step-by-Step
+   - Point 5: The Worst Daily Mistakes, Foods, or Habits That Make It Worse
+   - Point 6: The Complete Step-by-Step Natural Action Plan (Exact foods, herbs, vitamin forms, dosages, and daily timing)
+3. RICH EXPLANATION & EXAMPLES (NO ARTIFICIAL SHORTENING):
+   - Each of the 6 points MUST have `paragraphs`: a list of 3 detailed, engaging paragraphs (each paragraph 75 to 95 words).
+   - Every point MUST include concrete real-world examples (e.g., what happens after a specific meal, why a certain symptom appears at night, specific food/mineral pairings).
+4. WARM, POLITE OUTRO ('outro', 50 to 65 words):
+   - Summarize the #1 takeaway in one sentence, then politely and warmly ask the viewer to subscribe (follow) the channel, leave a comment sharing which symptom or step resonated with them, and hit the like button so this information can help more people.
+5. COMPANION YOUTUBE SHORT ('short_script'):
+   - 4 punchy, exciting scenes (`scenes`: list of 4 objects, 22 to 28 words each) for a 9:16 vertical YouTube Short on the exact same trending topic.
+
+Return ONLY valid JSON with this structure:
+{{
+  "title_options": [
+    "High-CTR Dr. Berg Style Title #1 (under 70 chars)",
+    "High-CTR Title #2",
+    "High-CTR Title #3"
+  ],
+  "intro_hook": "45-60 words thrilling hook...",
+  "points": [
+    {{
+      "point_num": 1,
+      "point_title": "Short Clear Title (under 48 chars)",
+      "point_subtitle": "One-line key takeaway (under 65 chars)",
+      "paragraphs": [
+        "Detailed paragraph 1 (75-95 words with real-life example)...",
+        "Detailed paragraph 2 (75-95 words with simple analogy)...",
+        "Detailed paragraph 3 (75-95 words with practical insight)..."
+      ]
+    }}
+  ],
+  "outro": "50-65 words warm polite request to subscribe, comment, and like...",
+  "short_script": {{
+    "short_title": "Viral Short Title #Shorts",
+    "hook_badge": "3-WORD HOOK",
+    "scenes": [
+      {{"narration": "22-28 words thrilling hook...", "portrait_query": "healthy nutrition food"}},
+      {{"narration": "22-28 words hidden root cause...", "portrait_query": "doctor medical clinic"}},
+      {{"narration": "22-28 words real-life example or warning sign...", "portrait_query": "vitamin supplement capsules"}},
+      {{"narration": "22-28 words quick tip + polite invite to watch full video & subscribe...", "portrait_query": "fresh herbal tea lemon"}}
+    ]
+  }},
+  "description": "Comprehensive SEO YouTube description...",
+  "tags": "comma, separated, high, search, tags"
+}}
+"""
+    genai.configure(api_key=GEMINI_API_KEY)
+    raw_data = {}
+    for model_name in ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]:
+        for attempt in range(2):
+            try:
+                print(f"Generating Deep Dr. Berg Script via {model_name} (attempt {attempt + 1})...")
+                model = genai.GenerativeModel(model_name)
+                res = model.generate_content(prompt, generation_config={"temperature": 0.65})
+                txt = (res.text or "").strip()
+                txt = re.sub(r"^```(?:json)?", "", txt).strip()
+                txt = re.sub(r"```$", "", txt).strip()
+                s_i, e_i = txt.find("{"), txt.rfind("}")
+                if s_i != -1 and e_i != -1:
+                    txt = txt[s_i:e_i + 1]
+                raw_data = json.loads(txt)
+                break
+            except Exception as e:
+                print(f"Model {model_name} warning: {e}")
+                time.sleep(2)
+        if raw_data:
+            break
+
+    return validate_script_data(raw_data, topic)
+
+def validate_script_data(data, topic):
     if not isinstance(data, dict):
         data = {}
     hook_badge, visual_subj = get_thumbnail_spec(topic["title"])
@@ -194,167 +417,106 @@ def validate_and_repair_script(data, topic):
     titles = data.get("title_options", [])
     if not isinstance(titles, list) or len(titles) < 3:
         titles = [
-            topic["title"],
-            f"The Real Reason Behind {topic['symptom'].title()[:42]} (And How to Fix It)",
-            f"Do This Every Day to Fix {topic['symptom'].title()[:38]} Naturally"
+            f"{topic['title'][:55]}: The Hidden Root Cause & Natural Fix",
+            f"What Happens to Your Body When You Fix {topic['title'][:42]}",
+            f"6 Warning Signs and Natural Solutions for {topic['title'][:42]}"
         ]
-    data["title_options"] = [str(t).strip()[:92] for t in titles[:3]]
+    data["title_options"] = [str(t).strip()[:90] for t in titles[:3]]
 
     data["thumbnail_prompt"] = (
-        f"Hyper-realistic 8K YouTube thumbnail in Dr. Eric Berg style, 16:9 aspect ratio. "
-        f"Main subject: {visual_subj}, ultra-sharp focus, dramatic lighting in {palette['glow']}. "
+        f"Hyper-realistic 8K medical YouTube thumbnail in Dr. Eric Berg style, 16:9 landscape. "
+        f"Subject: {visual_subj}, razor-sharp focus, dramatic lighting in {palette['glow']}. "
         f"Strictly NO brains or skulls. "
-        f"Massive bold 3D typography on the left reading '{hook_badge}' in {palette['accent']} with deep black outline, clean high-CTR medical design."
+        f"Bold 3D typography on the left reading '{hook_badge}' in {palette['accent']} with deep black shadow, high contrast."
     )
 
-    raw_sections = data.get("sections", [])
-    repaired_sections = []
-    for idx in range(5):
-        sec = raw_sections[idx] if idx < len(raw_sections) and isinstance(raw_sections[idx], dict) else {}
-        sec_title = str(sec.get("section_title", SECTION_ROLES[idx])).strip()[:52]
-        if len(sec_title) < 5:
-            sec_title = SECTION_ROLES[idx]
+    intro = clean_text_for_tts(data.get("intro_hook", ""))
+    if len(intro.split()) < 25:
+        intro = (
+            f"Have you ever wondered why so many people are suddenly searching for {topic['title']}? "
+            f"What if the symptom you have been brushing off as normal tiredness or aging is actually your body sending a flare signal? "
+            f"In the next few minutes, we are going to uncover the exact root cause inside your cells and the simple daily steps to fix it."
+        )
+    data["intro_hook"] = intro
 
-        bullets = sec.get("board_bullets", [])
-        if not isinstance(bullets, list) or len(bullets) < 3:
-            bullets = [
-                f"Key Factor 1: {topic['symptom'][:36].title()}",
-                f"Key Factor 2: {topic['root'][:38].title()}",
-                "Key Factor 3: Daily Cellular Balance & Recovery"
+    default_roles = [
+        "The Hidden Symptom & Common Myth",
+        "The Real Root Cause Inside Your Body",
+        "Real-Life Examples & Body Warning Signs",
+        "How Your Organs & Hormones React",
+        "Daily Mistakes That Make It Worse",
+        "The Step-by-Step Natural Action Plan"
+    ]
+    raw_points = data.get("points", [])
+    if not isinstance(raw_points, list):
+        raw_points = []
+    repaired_points = []
+    for idx in range(6):
+        pt = raw_points[idx] if idx < len(raw_points) and isinstance(raw_points[idx], dict) else {}
+        p_title = str(pt.get("point_title") or default_roles[idx]).strip()[:52]
+        p_sub = str(pt.get("point_subtitle") or f"Understanding step {idx + 1} of {topic['title'][:36]}").strip()[:68]
+        paras = pt.get("paragraphs", [])
+        if not isinstance(paras, list) or len(paras) < 3:
+            paras = [
+                f"When we examine part {idx + 1} of {topic['title']}, let us start with a real-life example you can immediately recognize. Imagine waking up after a full night of rest, yet feeling as if your cellular battery is still stuck at twenty percent because {topic['summary'][:120]}.",
+                f"To understand why this happens inside your body, think of your cellular receptors like a simple kitchen sink filter. When metabolic waste or excess insulin builds up day after day, nutrients cannot flow smoothly into the tissue, creating a backup that shows up as stubborn daily discomfort.",
+                f"The encouraging news is that your body responds remarkably fast once you remove the trigger and supply the right cofactor. By paying attention to meal timing, hydration, and targeted whole-food minerals, you give your organs the exact signal they need to repair."
             ]
-        bullets = [re.sub(r"\s+", " ", str(b)).strip()[:54] for b in bullets[:3]]
-
-        flow_str = str(sec.get("mechanism_flow", "Root Trigger  ->  Cellular Shift  ->  Daily Relief")).strip()[:62]
-        if "->" not in flow_str:
-            flow_str = "Root Cause  ->  Body Mechanism  ->  Natural Fix"
-
-        paragraphs = sec.get("paragraphs", [])
-        if not isinstance(paragraphs, list) or len(paragraphs) < 3:
-            paragraphs = [
-                f"Let us look closely at step {idx + 1} regarding {topic['title']}. Many people experience {topic['symptom']} every single day without realizing what their body is trying to tell them. Think of this process like a simple lock and key inside your cells.",
-                f"When we look beneath the surface symptom, the real driver is {topic['root']}. Once this balance shifts, your tissues cannot absorb nutrients or clear metabolic waste efficiently, which is why temporary quick fixes rarely solve the problem.",
-                "By addressing this specific mechanism directly through simple daily timing and the right nutritional cofactors, you give your organs the exact raw materials they need to restore normal function naturally."
-            ]
-
         clean_paras = []
-        for p_idx in range(3):
-            p_txt = clean_text_for_tts(paragraphs[p_idx] if p_idx < len(paragraphs) else paragraphs[-1])
-            words = p_txt.split()
-            if len(words) < 42:
-                p_txt += f" Remember that consistent daily habits targeting {topic['root'][:45]} make the biggest difference in how quickly your energy and comfort recover."
-            elif len(words) > 62:
-                trimmed = " ".join(words[:62])
-                dot = max(trimmed.rfind("."), trimmed.rfind("?"), trimmed.rfind("!"))
-                p_txt = trimmed[:dot + 1] if dot > 120 else trimmed + "."
-            clean_paras.append(p_txt)
+        for p_i in range(3):
+            txt = clean_text_for_tts(paras[p_i] if p_i < len(paras) else paras[-1])
+            if len(txt.split()) < 35:
+                txt += f" For example, patients who address this specific mechanism consistently notice a clear difference in their daily energy, digestion, and recovery within the first two weeks."
+            clean_paras.append(txt)
 
-        v_query = str(sec.get("visual_query", topic["visual"])).strip()
-        if len(v_query) < 4:
-            v_query = topic["visual"]
-
-        repaired_sections.append({
-            "section_num": idx + 1,
-            "section_title": sec_title,
-            "board_bullets": bullets,
-            "mechanism_flow": flow_str,
-            "paragraphs": clean_paras,
-            "visual_query": v_query
+        repaired_points.append({
+            "point_num": idx + 1,
+            "point_title": p_title,
+            "point_subtitle": p_sub,
+            "paragraphs": clean_paras
         })
+    data["points"] = repaired_points
 
-    data["sections"] = repaired_sections
+    outro = clean_text_for_tts(data.get("outro", ""))
+    if len(outro.split()) < 25:
+        outro = (
+            "Remember, small consistent changes to your daily routine always beat complicated temporary fixes when it comes to healing your body at the root level. "
+            "If you found today's explanation helpful, please take a moment to subscribe to MedPulse 5, hit the like button, and leave a comment below sharing your experience or any question you would like us to cover next."
+        )
+    data["outro"] = outro
 
-    short_d = data.get("short_script", {})
-    if not isinstance(short_d, dict):
-        short_d = {}
+    sc = data.get("short_script", {})
+    if not isinstance(sc, dict):
+        sc = {}
+    raw_scenes = sc.get("scenes", [])
+    if not isinstance(raw_scenes, list) or len(raw_scenes) < 4:
+        raw_scenes = [
+            {"narration": f"Stop ignoring this sign! Right now, {topic['title']} is trending for a huge reason that directly affects your daily energy.", "portrait_query": SAFE_PORTRAIT_QUERIES[0]},
+            {"narration": "Most people treat the surface symptom, but the real root cause starts deep inside your cells when key minerals and hormones fall out of balance.", "portrait_query": SAFE_PORTRAIT_QUERIES[1]},
+            {"narration": "Think of it like a clogged filter in your body—until you clear the root trigger, temporary quick fixes will never give you lasting relief.", "portrait_query": SAFE_PORTRAIT_QUERIES[2]},
+            {"narration": "Watch our full step-by-step guide linked right below on MedPulse 5, and please subscribe, like, and leave a comment!", "portrait_query": SAFE_PORTRAIT_QUERIES[3]}
+        ]
+    clean_scenes = []
+    for s_i, s_obj in enumerate(raw_scenes[:4]):
+        if not isinstance(s_obj, dict):
+            s_obj = {}
+        s_txt = clean_text_for_tts(s_obj.get("narration", ""))
+        if len(s_txt.split()) < 12:
+            s_txt = f"Here is the hidden truth about {topic['title']} and how you can support your body naturally starting today."
+        s_q = str(s_obj.get("portrait_query") or SAFE_PORTRAIT_QUERIES[s_i % len(SAFE_PORTRAIT_QUERIES)]).strip()
+        clean_scenes.append({"narration": s_txt, "portrait_query": s_q})
+
     data["short_script"] = {
-        "short_title": str(short_d.get("short_title", f"{hook_badge}: {data['title_options'][0][:45]} #Shorts")).strip(),
-        "hook_banner": hook_badge,
-        "takeaway_points": [
-            str(short_d.get("point_1", f"1. Symptom: {topic['symptom'][:32].title()}"))[:44],
-            str(short_d.get("point_2", f"2. Root Cause: {topic['root'][:30].title()}"))[:44],
-            str(short_d.get("point_3", "3. Watch Full Step-by-Step Protocol Below"))[:44]
-        ],
-        "part1_hook": clean_text_for_tts(short_d.get("part1_hook", f"If you struggle with {topic['symptom']}, stop ignoring what your body is telling you.")),
-        "part2_root": clean_text_for_tts(short_d.get("part2_root", f"The real root cause is rarely what you think. It comes down to {topic['root']}.")),
-        "part3_action": clean_text_for_tts(short_d.get("part3_action", "Tap the related video link right below on MedPulse 5 for the complete step-by-step home protocol and exact daily timing.")),
-        "visual_query": topic["visual"]
+        "short_title": str(sc.get("short_title") or f"{hook_badge}: {data['title_options'][0][:45]} #Shorts").strip(),
+        "hook_badge": str(sc.get("hook_badge") or hook_badge).strip().upper()[:22],
+        "scenes": clean_scenes
     }
 
     if not data.get("description"):
-        data["description"] = f"In this episode on MedPulse 5, we break down {topic['title']} using simple physiology, root-cause analysis, and a practical daily protocol."
+        data["description"] = f"In this comprehensive Dr. Berg style breakdown on MedPulse 5, we explore {topic['title']} with real-life examples, simple physiology, and a natural action plan."
     if not data.get("tags"):
-        data["tags"] = "Dr Berg style health, root cause medicine, natural remedies, vitamin deficiency signs, fatty liver, insulin resistance, magnesium benefits, MedPulse 5"
+        data["tags"] = "Dr Berg style, health trends, root cause medicine, natural remedies, vitamin deficiency, nutrition examples, MedPulse 5"
     return data
-
-def generate_dr_berg_script(topic):
-    prompt = f"""
-You are an expert medical educator modeled after Dr. Eric Berg ('Dr. Berg').
-Your specialty is taking ONE high-demand everyday health symptom, nutrient, or food secret and explaining its hidden root cause using simple analogies, numbered whiteboard points, and a practical home action plan.
-
-SINGLE TOPIC FOR THIS EPISODE: {topic['title']}
-COMMON SYMPTOMS EXPERIENCED BY VIEWER: {topic['symptom']}
-CORE BIOLOGICAL MECHANISM: {topic['root']}
-
-STRICT DR. BERG STYLE RULES:
-1. ZERO FLUFF: Start Section 1 Paragraph 1 immediately with the viewer's symptom ('If you have ever noticed...', 'Have you ever wondered why...'). Do NOT use boring news anchor introductions.
-2. SIMPLE ANALOGIES: Use vivid everyday analogies (like 'dish soap dissolving grease', 'a key in a rusted lock', or 'a clogged kitchen filter') to explain physiology simply.
-3. CALM, DELIBERATE PACING: Write short, clear sentences that sound natural when spoken slowly and calmly by a teaching doctor.
-4. STRUCTURE THE SINGLE TOPIC INTO 5 SEQUENTIAL SECTIONS:
-   - Section 1: The Everyday Symptom & Surprising Root Cause
-   - Section 2: 3 Warning Signs Your Body Sends You
-   - Section 3: The Hidden Mechanism Inside Your Body
-   - Section 4: Daily Mistakes That Make It Worse
-   - Section 5: The Step-by-Step Practical Home Protocol (Exact food/nutrient forms, timing, and 7-day habit)
-5. Each of the 5 sections MUST contain:
-   - 'section_title': Short clear title (under 48 chars)
-   - 'board_bullets': List of EXACTLY 3 concise whiteboard summary points (under 48 chars each) that will be drawn on the Dr. Berg Whiteboard Card.
-   - 'mechanism_flow': A 3-step arrow chain using '->' (e.g. 'Low Bile Flow -> Trapped Toxins -> Right Shoulder Ache', under 58 chars).
-   - 'paragraphs': List of EXACTLY 3 spoken paragraphs. Each paragraph MUST be 46 to 56 words (100% accurate English spelling).
-   - 'visual_query': 4 to 6 word Pexels search query for calm background footage (e.g. '{topic['visual']}').
-
-Return ONLY valid JSON:
-{{
-  "title_options": ["Title 1", "Title 2", "Title 3"],
-  "sections": [
-    {{
-      "section_title": "The Everyday Symptom & Surprising Root Cause",
-      "board_bullets": ["Point 1...", "Point 2...", "Point 3..."],
-      "mechanism_flow": "Step A -> Step B -> Step C",
-      "paragraphs": ["46-56 words...", "46-56 words...", "46-56 words..."],
-      "visual_query": "{topic['visual']}"
-    }}
-  ],
-  "short_script": {{
-    "short_title": "Short title #Shorts",
-    "point_1": "1. Key symptom...",
-    "point_2": "2. Hidden root cause...",
-    "point_3": "3. Daily natural fix...",
-    "part1_hook": "20-26 words...",
-    "part2_root": "24-30 words...",
-    "part3_action": "20-25 words..."
-  }},
-  "description": "Full SEO description...",
-  "tags": "comma, separated, tags"
-}}
-"""
-    genai.configure(api_key=GEMINI_API_KEY)
-    for model_name in ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]:
-        for attempt in range(2):
-            try:
-                print(f"Generating Dr. Berg Whiteboard Script via {model_name} (attempt {attempt + 1})...")
-                model = genai.GenerativeModel(model_name)
-                res = model.generate_content(prompt, generation_config={"temperature": 0.6})
-                raw = (res.text or "").strip()
-                raw = re.sub(r"^```(?:json)?", "", raw).strip()
-                raw = re.sub(r"```$", "", raw).strip()
-                s_i, e_i = raw.find("{"), raw.rfind("}")
-                if s_i != -1 and e_i != -1:
-                    raw = raw[s_i:e_i + 1]
-                return validate_and_repair_script(json.loads(raw), topic)
-            except Exception as e:
-                print(f"Model {model_name} warning: {e}")
-                time.sleep(2)
-    return validate_and_repair_script({}, topic)
 
 async def _edge_tts_save(text, filename, rate=VOICE_RATE):
     communicate = edge_tts.Communicate(text, VOICE_NAME, rate=rate, pitch=VOICE_PITCH)
@@ -371,17 +533,22 @@ def generate_tts(text, filename, rate=VOICE_RATE):
             time.sleep(2)
     return False
 
-def make_silence_audio(duration=0.38, sr=44100):
+def make_silence_audio(duration=0.35, sr=44100):
     arr = np.zeros((int(sr * duration), 2), dtype=np.float32)
     return AudioArrayClip(arr, fps=sr).set_duration(duration)
 
-def search_and_download_video(query, out_path, used_ids):
+def download_and_prepare_clip(query, norm_out_path, used_ids, orientation="landscape", target_w=W, target_h=H, target_dur=28):
     headers = {"Authorization": PEXELS_API_KEY}
-    clean_q = " ".join(re.findall(r"[a-zA-Z]+", str(query))[:5]) or "healthy nutrition"
-    candidates = [clean_q, random.choice(SAFE_MEDICAL_QUERIES), "healthy food nutrition table"]
+    clean_q = " ".join(re.findall(r"[a-zA-Z]+", str(query))[:5])
+    fallback_pool = SAFE_LANDSCAPE_QUERIES if orientation == "landscape" else SAFE_PORTRAIT_QUERIES
+    candidates = [clean_q] + random.sample(fallback_pool, min(4, len(fallback_pool)))
+
+    raw_tmp = f"{norm_out_path}_raw.mp4"
     for q in candidates:
+        if not q:
+            continue
         try:
-            url = f"https://api.pexels.com/videos/search?query={urllib.parse.quote(q)}&per_page=15&orientation=landscape"
+            url = f"https://api.pexels.com/videos/search?query={urllib.parse.quote(q)}&per_page=18&orientation={orientation}"
             r = requests.get(url, headers=headers, timeout=15)
             if r.status_code != 200:
                 continue
@@ -390,45 +557,65 @@ def search_and_download_video(query, out_path, used_ids):
             for v in videos:
                 vid_id = str(v.get("id", ""))
                 dur = v.get("duration", 0)
-                if not vid_id or vid_id in used_ids or dur < 5 or dur > 90:
+                if not vid_id or vid_id in used_ids or dur < 5 or dur > 95:
                     continue
+                v_w, v_h = v.get("width", 0) or 0, v.get("height", 0) or 0
+                if orientation == "portrait" and v_w > v_h:
+                    continue
+                if orientation == "landscape" and v_h > v_w:
+                    continue
+
                 files = v.get("video_files", [])
                 best = None
                 for vf in files:
-                    w_v, h_v = vf.get("width", 0) or 0, vf.get("height", 0) or 0
-                    if vf.get("file_type") == "video/mp4" and w_v >= h_v and 480 <= h_v <= 1080:
+                    if vf.get("file_type") != "video/mp4":
+                        continue
+                    fw, fh = vf.get("width", 0) or 0, vf.get("height", 0) or 0
+                    if orientation == "portrait" and fh > fw and fw >= 540:
                         best = vf
                         break
-                if not best and files:
-                    best = files[0]
-                if best and best.get("link"):
-                    vr = requests.get(best["link"], stream=True, timeout=25)
-                    if vr.status_code == 200:
-                        with open(out_path, "wb") as f:
-                            for chunk in vr.iter_content(chunk_size=65536):
-                                if chunk:
-                                    f.write(chunk)
-                        if os.path.exists(out_path) and os.path.getsize(out_path) > 50000:
+                    if orientation == "landscape" and fw > fh and fh >= 540:
+                        best = vf
+                        break
+                if not best:
+                    continue
+
+                vr = requests.get(best["link"], stream=True, timeout=25)
+                if vr.status_code == 200:
+                    with open(raw_tmp, "wb") as f:
+                        for chunk in vr.iter_content(chunk_size=65536):
+                            if chunk:
+                                f.write(chunk)
+                    if os.path.exists(raw_tmp) and os.path.getsize(raw_tmp) > 50000:
+                        vf_filter = (
+                            f"scale={target_w}:{target_h}:force_original_aspect_ratio=increase,"
+                            f"crop={target_w}:{target_h},"
+                            f"setsar=1:1,fps={FPS},format=yuv420p"
+                        )
+                        cmd = [
+                            "ffmpeg", "-y", "-stream_loop", "-1", "-i", raw_tmp,
+                            "-t", str(int(target_dur)),
+                            "-vf", vf_filter, "-an",
+                            "-metadata:s:v:0", "rotate=0",
+                            "-c:v", "libx264", "-preset", "ultrafast", "-crf", "22",
+                            "-threads", "4", norm_out_path
+                        ]
+                        subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=50)
+                        if os.path.exists(raw_tmp):
+                            os.remove(raw_tmp)
+                        if os.path.exists(norm_out_path) and os.path.getsize(norm_out_path) > 40000:
                             used_ids.append(vid_id)
                             return True
         except Exception:
+            if os.path.exists(raw_tmp):
+                try:
+                    os.remove(raw_tmp)
+                except Exception:
+                    pass
             continue
     return False
 
-def normalize_clip_strict_aspect(in_path, out_path, target_w, target_h):
-    vf = (
-        f"scale={target_w}:{target_h}:force_original_aspect_ratio=increase,"
-        f"crop={target_w}:{target_h}:(iw-{target_w})/2:(ih-{target_h})/2,"
-        f"setsar=1:1,fps={FPS},format=yuv420p"
-    )
-    cmd = ["ffmpeg", "-y", "-i", in_path, "-t", "16", "-vf", vf, "-an", "-c:v", "libx264", "-preset", "ultrafast", "-crf", "22", "-threads", "4", out_path]
-    try:
-        subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=45)
-        return os.path.exists(out_path) and os.path.getsize(out_path) > 25000
-    except Exception:
-        return False
-
-def split_into_subtitle_chunks(text, max_words=6):
+def split_into_subtitle_chunks(text, max_words=7):
     words = clean_text_for_tts(text).split()
     chunks, cur = [], []
     for w in words:
@@ -440,207 +627,190 @@ def split_into_subtitle_chunks(text, max_words=6):
         chunks.append(" ".join(cur))
     return chunks
 
-def render_dr_berg_long_frame(sec_num, sec_title, bullets, flow_str, active_bullet_idx, subtitle_text):
+def create_classic_transition_card(point_num, point_title, point_subtitle, duration=2.8):
+    img = Image.new("RGB", (W, H), (10, 18, 32))
+    draw = ImageDraw.Draw(img)
+    for y in range(H):
+        shade = int(18 + (y / H) * 18)
+        draw.line([(0, y), (W, y)], fill=(10, shade, shade + 16))
+
+    draw.rounded_rectangle([110, 185, W - 110, H - 185], radius=16, fill=(14, 26, 46), outline=(0, 205, 250), width=3)
+    draw.rectangle([110, 185, 128, H - 185], fill=(0, 205, 250))
+
+    draw.text((165, 235), f"KEY POINT 0{point_num} OF 06", font=load_font(26, True), fill=(0, 215, 255))
+    draw.text((165, 295), point_title[:46], font=load_font(44, True), fill=(255, 255, 255))
+    draw.text((165, 385), point_subtitle[:64], font=load_font(24, False), fill=(200, 220, 240))
+
+    if LOGO_PIL is not None:
+        img.paste(LOGO_PIL, (W - 110 - 90, 210), LOGO_PIL)
+
+    clip = ImageClip(np.array(img)).set_duration(duration)
+    sr = 44100
+    t = np.linspace(0, duration, int(sr * duration), endpoint=False)
+    wave = (0.11 * np.sin(2 * np.pi * 528.0 * t) + 0.07 * np.sin(2 * np.pi * 660.0 * t)) * np.exp(-2.6 * t)
+    chime = AudioArrayClip(np.column_stack([wave, wave]).astype(np.float32), fps=sr)
+    return clip.set_audio(chime)
+
+def render_classic_clean_frame(point_num, point_title, subtitle_text):
     img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
-
-    card_x1, card_y1, card_x2, card_y2 = 34, 48, 635, 535
-    draw.rounded_rectangle([card_x1, card_y1, card_x2, card_y2], radius=18, fill=(10, 20, 36, 232), outline=(0, 210, 255, 220), width=3)
-    draw.rounded_rectangle([card_x1, card_y1, card_x2, card_y1 + 64], radius=18, fill=(0, 175, 225, 255))
-    draw.rectangle([card_x1, card_y1 + 42, card_x2, card_y1 + 64], fill=(0, 175, 225, 255))
-    draw.text((card_x1 + 22, card_y1 + 17), f"STEP 0{sec_num}: {sec_title.upper()[:34]}", font=load_font(22, True), fill=(8, 16, 28, 255))
-
-    for b_i, b_text in enumerate(bullets[:3]):
-        by = card_y1 + 92 + b_i * 102
-        is_active = (b_i <= active_bullet_idx)
-        bg_col = (18, 38, 66, 245) if is_active else (14, 26, 44, 180)
-        border_col = (255, 215, 60, 255) if b_i == active_bullet_idx else ((0, 210, 255, 180) if is_active else (70, 95, 125, 120))
-        draw.rounded_rectangle([card_x1 + 20, by, card_x2 - 20, by + 84], radius=12, fill=bg_col, outline=border_col, width=2)
-        badge_col = (255, 215, 60, 255) if b_i == active_bullet_idx else (0, 200, 245, 230)
-        draw.ellipse([card_x1 + 34, by + 20, card_x1 + 76, by + 62], fill=badge_col)
-        draw.text((card_x1 + 49, by + 27), str(b_i + 1), font=load_font(22, True), fill=(8, 16, 28, 255))
-
-        words = b_text.split()
-        mid = max(1, len(words) // 2)
-        b_lines = [" ".join(words[:mid]), " ".join(words[mid:])] if len(words) > 5 else [b_text]
-        txt_col = (255, 255, 255, 255) if is_active else (160, 180, 200, 200)
-        for l_i, line in enumerate(b_lines[:2]):
-            draw.text((card_x1 + 92, by + 18 + l_i * 25), line, font=load_font(19, True), fill=txt_col)
-
-    flow_y = card_y2 - 74
-    draw.rounded_rectangle([card_x1 + 20, flow_y, card_x2 - 20, card_y2 - 18], radius=10, fill=(8, 15, 28, 250), outline=(0, 210, 255, 160), width=2)
-    draw.text((card_x1 + 34, flow_y + 16), flow_str[:52], font=load_font(17, True), fill=(120, 235, 255, 255))
 
     if LOGO_PIL is not None:
         img.paste(LOGO_PIL, (W - 64 - 24, 22), LOGO_PIL)
 
     if subtitle_text:
-        f_sub = load_font(29, True)
+        f_sub = load_font(30, True)
         bbox = draw.textbbox((0, 0), subtitle_text, font=f_sub)
         tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
-        bx1 = max(24, (W - tw) // 2 - 22)
-        bx2 = min(W - 24, (W + tw) // 2 + 22)
-        by1, by2 = 562, 562 + th + 24
-        draw.rounded_rectangle([bx1, by1, bx2, by2], radius=12, fill=(6, 12, 22, 235), outline=(255, 220, 70, 210), width=2)
+        bx1 = max(28, (W - tw) // 2 - 22)
+        bx2 = min(W - 28, (W + tw) // 2 + 22)
+        by1, by2 = 572, 572 + th + 24
+        draw.rounded_rectangle([bx1, by1, bx2, by2], radius=12, fill=(6, 12, 22, 228), outline=(0, 210, 255, 185), width=2)
         tx, ty = (W - tw) // 2, by1 + 10
         draw.text((tx + 2, ty + 2), subtitle_text, font=f_sub, fill=(0, 0, 0, 255))
-        draw.text((tx, ty), subtitle_text, font=f_sub, fill=(255, 248, 140, 255))
+        draw.text((tx, ty), subtitle_text, font=f_sub, fill=(255, 248, 145, 255))
 
-    bar_y = 648
-    draw.rectangle([0, bar_y, W, H], fill=(8, 15, 28, 235))
+    bar_y = 656
+    draw.rectangle([0, bar_y, W, H], fill=(8, 15, 28, 225))
     draw.rectangle([0, bar_y, W, bar_y + 3], fill=(0, 210, 255, 255))
-    draw.rectangle([24, bar_y + 14, 195, bar_y + 52], fill=(0, 185, 235, 255))
-    draw.text((38, bar_y + 22), f"SECTION 0{sec_num}/05", font=load_font(19, True), fill=(8, 15, 28, 255))
-    draw.text((215, bar_y + 20), f"{sec_title}  |  MEDPULSE 5 ROOT-CAUSE GUIDE", font=load_font(22, True), fill=(245, 250, 255, 255))
+    badge_label = f"POINT 0{point_num}" if point_num > 0 else "MEDPULSE 5"
+    draw.rounded_rectangle([24, bar_y + 13, 175, bar_y + 50], radius=6, fill=(0, 185, 235, 255))
+    draw.text((38, bar_y + 20), badge_label, font=load_font(19, True), fill=(8, 15, 28, 255))
+    draw.text((195, bar_y + 19), point_title[:58], font=load_font(23, True), fill=(245, 250, 255, 255))
     return np.array(img)
 
-def build_dr_berg_overlay_track(sec_num, sec_title, bullets, flow_str, p_idx, narration_text, total_duration):
-    chunks = split_into_subtitle_chunks(narration_text, max_words=6)
+def build_classic_overlay_track(point_num, point_title, narration_text, total_duration):
+    chunks = split_into_subtitle_chunks(narration_text, max_words=7)
     if not chunks:
-        return ImageClip(render_dr_berg_long_frame(sec_num, sec_title, bullets, flow_str, p_idx, "")).set_duration(total_duration)
+        return ImageClip(render_classic_clean_frame(point_num, point_title, "")).set_duration(total_duration)
     char_lengths = [max(len(c), 4) for c in chunks]
     total_chars = sum(char_lengths)
     clips, elapsed = [], 0.0
     for idx, chunk in enumerate(chunks):
         dur = max(0.15, total_duration - elapsed) if idx == len(chunks) - 1 else max(0.25, total_duration * (char_lengths[idx] / total_chars))
         elapsed += dur
-        frame = render_dr_berg_long_frame(sec_num, sec_title, bullets, flow_str, p_idx, chunk)
-        clips.append(ImageClip(frame).set_duration(dur))
+        clips.append(ImageClip(render_classic_clean_frame(point_num, point_title, chunk)).set_duration(dur))
     return concatenate_videoclips(clips).set_duration(total_duration)
 
-def create_section_bumper(sec_num, sec_title, flow_str, duration=2.3):
-    img = Image.new("RGB", (W, H), (8, 16, 30))
-    draw = ImageDraw.Draw(img)
-    draw.rounded_rectangle([90, 170, W - 90, H - 170], radius=22, fill=(12, 24, 44), outline=(0, 215, 255), width=3)
-    draw.rectangle([90, 170, 114, H - 170], fill=(0, 215, 255))
-    draw.text((150, 220), f"DR. BERG STYLE CLINICAL BREAKDOWN  |  PART 0{sec_num} OF 05", font=load_font(24, True), fill=(0, 215, 255))
-    draw.text((150, 285), sec_title[:44], font=load_font(42, True), fill=(255, 255, 255))
-    draw.text((150, 385), f"PATHWAY:  {flow_str[:54]}", font=load_font(24, True), fill=(255, 230, 110))
-    if LOGO_PIL is not None:
-        img.paste(LOGO_PIL, (W - 180, 195), LOGO_PIL)
-    clip = ImageClip(np.array(img)).set_duration(duration)
-    sr = 44100
-    t = np.linspace(0, duration, int(sr * duration), endpoint=False)
-    wave = (0.12 * np.sin(2 * np.pi * 528.0 * t) + 0.08 * np.sin(2 * np.pi * 660.0 * t)) * np.exp(-2.8 * t)
-    chime = AudioArrayClip(np.column_stack([wave, wave]).astype(np.float32), fps=sr)
-    return clip.set_audio(chime)
-
-def generate_ambient_music(duration, sr=44100):
-    chunk_len = 10.0
-    t = np.linspace(0, chunk_len, int(sr * chunk_len), endpoint=False)
-    wave = (0.32 * np.sin(2 * np.pi * 110.0 * t) + 0.22 * np.sin(2 * np.pi * 164.81 * t) + 0.16 * np.sin(2 * np.pi * 220.0 * t))
-    cycle = (wave * 0.032).astype(np.float32)
-    stereo = np.column_stack([cycle, cycle])
-    repeats = int(math.ceil(duration / chunk_len)) + 1
-    full_arr = np.tile(stereo, (repeats, 1))[:int(sr * duration)]
-    return AudioArrayClip(full_arr, fps=sr).set_duration(duration)
-
-def loop_or_trim_clip(clip_path, target_duration, w=W, h=H):
-    if clip_path and os.path.exists(clip_path):
-        try:
-            c = VideoFileClip(clip_path).without_audio()
-            if c.duration and c.duration > 1.0:
-                if c.duration < target_duration:
-                    n = int(math.ceil(target_duration / c.duration)) + 1
-                    looped = concatenate_videoclips([c] * n)
-                    return looped.subclip(0, target_duration), [c]
-                return c.subclip(0, target_duration), [c]
-        except Exception:
-            pass
-    return ColorClip(size=(w, h), color=(12, 24, 42), duration=target_duration), []
-
-def render_short_card_overlay(hook_banner, takeaway_points, active_idx, subtitle_text):
-    img = Image.new("RGBA", (SHORT_W, SHORT_H), (10, 18, 32, 255))
+def render_true_short_overlay_frame(hook_badge, subtitle_text):
+    img = Image.new("RGBA", (SHORT_W, SHORT_H), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
 
-    draw.rounded_rectangle([28, 42, SHORT_W - 105, 118], radius=14, fill=(0, 180, 230, 255))
-    draw.text((46, 64), f"ROOT CAUSE: {hook_banner[:20]}", font=load_font(25, True), fill=(8, 16, 28, 255))
+    draw.rounded_rectangle([32, 58, SHORT_W - 110, 122], radius=14, fill=(8, 16, 30, 215), outline=(0, 215, 255, 230), width=2)
+    draw.text((52, 76), f"MEDPULSE 5  |  {hook_badge[:18]}", font=load_font(22, True), fill=(0, 230, 255, 255))
+
     if LOGO_SHORT_PIL is not None:
-        img.paste(LOGO_SHORT_PIL, (SHORT_W - 54 - 24, 48), LOGO_SHORT_PIL)
-
-    vp_x1, vp_y1, vp_x2, vp_y2 = 30, 145, SHORT_W - 30, 625
-    draw.rectangle([vp_x1, vp_y1, vp_x2, vp_y2], fill=(0, 0, 0, 0))
-    draw.rounded_rectangle([vp_x1 - 3, vp_y1 - 3, vp_x2 + 3, vp_y2 + 3], radius=16, outline=(0, 215, 255, 255), width=4)
-
-    board_y = 650
-    draw.rounded_rectangle([30, board_y, SHORT_W - 30, 915], radius=16, fill=(14, 28, 50, 245), outline=(0, 210, 255, 190), width=2)
-    for idx, pt in enumerate(takeaway_points[:3]):
-        py = board_y + 18 + idx * 80
-        bg_c = (24, 48, 82, 255) if idx == active_idx else (12, 22, 38, 210)
-        bd_c = (255, 220, 65, 255) if idx == active_idx else (60, 95, 135, 160)
-        draw.rounded_rectangle([46, py, SHORT_W - 46, py + 66], radius=10, fill=bg_c, outline=bd_c, width=2)
-        draw.text((64, py + 19), pt[:42], font=load_font(22, True), fill=(255, 255, 255, 255))
+        img.paste(LOGO_SHORT_PIL, (SHORT_W - 54 - 24, 58), LOGO_SHORT_PIL)
 
     if subtitle_text:
-        f_sub = load_font(31, True)
+        f_sub = load_font(34, True)
         words = subtitle_text.split()
         mid = max(1, len(words) // 2)
         lines = [" ".join(words[:mid]), " ".join(words[mid:])] if len(words) > 4 else [subtitle_text]
-        sy1, sy2 = 940, 940 + len(lines) * 44 + 28
-        draw.rounded_rectangle([32, sy1, SHORT_W - 32, sy2], radius=14, fill=(6, 12, 22, 245), outline=(255, 220, 65, 240), width=3)
+        sy1 = 920
+        sy2 = sy1 + len(lines) * 48 + 28
+        draw.rounded_rectangle([36, sy1, SHORT_W - 36, sy2], radius=16, fill=(6, 12, 22, 225), outline=(255, 225, 70, 235), width=3)
         for i, line in enumerate(lines):
             bbox = draw.textbbox((0, 0), line, font=f_sub)
             tw = bbox[2] - bbox[0]
-            tx, ty = (SHORT_W - tw) // 2, sy1 + 12 + i * 42
+            tx, ty = (SHORT_W - tw) // 2, sy1 + 12 + i * 46
             draw.text((tx + 2, ty + 2), line, font=f_sub, fill=(0, 0, 0, 255))
-            draw.text((tx, ty), line, font=f_sub, fill=(255, 245, 120, 255))
+            draw.text((tx, ty), line, font=f_sub, fill=(255, 248, 120, 255))
 
-    draw.rectangle([0, SHORT_H - 84, SHORT_W, SHORT_H], fill=(0, 175, 225, 255))
-    draw.text((48, SHORT_H - 56), "TAP BELOW FOR FULL STEP-BY-STEP PROTOCOL", font=load_font(23, True), fill=(8, 16, 28, 255))
+    draw.rounded_rectangle([40, SHORT_H - 110, SHORT_W - 40, SHORT_H - 48], radius=12, fill=(8, 16, 30, 225), outline=(0, 210, 255, 220), width=2)
+    draw.text((68, SHORT_H - 90), "WATCH FULL VIDEO & SUBSCRIBE TO MEDPULSE 5", font=load_font(21, True), fill=(255, 255, 255, 255))
     return np.array(img)
 
-def build_short_track(hook_banner, takeaway_points, active_idx, narration_text, total_duration):
+def build_true_short_overlay_track(hook_badge, narration_text, total_duration):
     chunks = split_into_subtitle_chunks(narration_text, max_words=5)
     if not chunks:
-        return ImageClip(render_short_card_overlay(hook_banner, takeaway_points, active_idx, "")).set_duration(total_duration)
+        return ImageClip(render_true_short_overlay_frame(hook_badge, "")).set_duration(total_duration)
     char_lengths = [max(len(c), 3) for c in chunks]
     total_chars = sum(char_lengths)
     clips, elapsed = [], 0.0
     for idx, chunk in enumerate(chunks):
         dur = max(0.15, total_duration - elapsed) if idx == len(chunks) - 1 else max(0.25, total_duration * (char_lengths[idx] / total_chars))
         elapsed += dur
-        frame = render_short_card_overlay(hook_banner, takeaway_points, active_idx, chunk)
-        clips.append(ImageClip(frame).set_duration(dur))
+        clips.append(ImageClip(render_true_short_overlay_frame(hook_badge, chunk)).set_duration(dur))
     return concatenate_videoclips(clips).set_duration(total_duration)
 
-def build_companion_short(script_data, used_videos):
-    print("Building Distortion-Free Dr. Berg Style Companion Short...")
-    sc = script_data["short_script"]
-    vw, vh = SHORT_W - 60, 480
-    raw_v, norm_v = "temp/short_raw.mp4", "temp/short_norm_box.mp4"
-    has_vid = False
-    if search_and_download_video(sc["visual_query"], raw_v, used_videos):
-        has_vid = normalize_clip_strict_aspect(raw_v, norm_v, vw, vh)
+def generate_ambient_music(duration, sr=44100):
+    chunk_len = 10.0
+    t = np.linspace(0, chunk_len, int(sr * chunk_len), endpoint=False)
+    wave = (0.30 * np.sin(2 * np.pi * 110.0 * t) + 0.20 * np.sin(2 * np.pi * 164.81 * t) + 0.15 * np.sin(2 * np.pi * 220.0 * t))
+    cycle = (wave * 0.030).astype(np.float32)
+    stereo = np.column_stack([cycle, cycle])
+    repeats = int(math.ceil(duration / chunk_len)) + 1
+    full_arr = np.tile(stereo, (repeats, 1))[:int(sr * duration)]
+    return AudioArrayClip(full_arr, fps=sr).set_duration(duration)
 
-    parts = [
-        (0, sc["part1_hook"]),
-        (1, sc["part2_root"]),
-        (2, sc["part3_action"])
-    ]
-    segments, open_res = [], []
-    for idx, text in parts:
-        tts_p = f"temp/short_p{idx}.mp3"
-        if not generate_tts(text, tts_p, rate="-4%"):
+def build_paragraph_video_segment(point_num, point_title, p_text, v_query, seg_tag, used_videos, open_resources):
+    tts_path = f"temp/{seg_tag}.mp3"
+    if not generate_tts(p_text, tts_path):
+        return None
+    raw_a = AudioFileClip(tts_path)
+    open_resources.append(raw_a)
+    safe_v_dur = max(0.3, raw_a.duration - 0.06)
+    paused_audio = concatenate_audioclips([raw_a.subclip(0, safe_v_dur), make_silence_audio(0.38)])
+    seg_dur = paused_audio.duration
+
+    norm_vid_path = f"temp/{seg_tag}_hd.mp4"
+    target_prep_dur = int(math.ceil(seg_dur)) + 4
+    ok = download_and_prepare_clip(
+        v_query, norm_vid_path, used_videos,
+        orientation="landscape", target_w=W, target_h=H, target_dur=target_prep_dur
+    )
+    if ok and os.path.exists(norm_vid_path):
+        v_clip = VideoFileClip(norm_vid_path).without_audio()
+        open_resources.append(v_clip)
+        bg_clip = v_clip.subclip(0, min(seg_dur, v_clip.duration)).set_duration(seg_dur)
+    else:
+        bg_clip = ColorClip(size=(W, H), color=(12, 24, 42), duration=seg_dur)
+
+    ov_track = build_classic_overlay_track(point_num, point_title, p_text, seg_dur)
+    return CompositeVideoClip([bg_clip, ov_track], size=(W, H)).set_duration(seg_dur).set_audio(paused_audio)
+
+def build_companion_short(script_data, used_videos):
+    print("Building Full-Screen 9:16 Native Portrait YouTube Short (Zero Stretching)...")
+    sc = script_data["short_script"]
+    hook_badge = sc["hook_badge"]
+    scenes = sc["scenes"]
+    short_segments, open_res = [], []
+
+    for idx, scene in enumerate(scenes[:4]):
+        s_text = scene["narration"]
+        p_query = scene["portrait_query"]
+        tts_p = f"temp/short_s{idx}.mp3"
+        if not generate_tts(s_text, tts_p, rate="-2%"):
             continue
         raw_a = AudioFileClip(tts_p)
         open_res.append(raw_a)
         safe_d = max(0.3, raw_a.duration - 0.06)
-        voice_a = concatenate_audioclips([raw_a.subclip(0, safe_d), make_silence_audio(0.28)])
+        voice_a = concatenate_audioclips([raw_a.subclip(0, safe_d), make_silence_audio(0.25)])
         seg_d = voice_a.duration
 
-        base_bg = ColorClip(size=(SHORT_W, SHORT_H), color=(10, 18, 32), duration=seg_d)
-        vid_clip, loaded = loop_or_trim_clip(norm_v if has_vid else None, seg_d, w=vw, h=vh)
-        open_res.extend(loaded)
-        vid_positioned = vid_clip.set_position((30, 145))
-        ov_card = build_short_track(sc["hook_banner"], sc["takeaway_points"], idx, text, seg_d)
-        comp = CompositeVideoClip([base_bg, vid_positioned, ov_card], size=(SHORT_W, SHORT_H)).set_duration(seg_d).set_audio(voice_a)
-        segments.append(comp)
+        norm_v = f"temp/short_v{idx}_9x16.mp4"
+        ok = download_and_prepare_clip(
+            p_query, norm_v, used_videos,
+            orientation="portrait", target_w=SHORT_W, target_h=SHORT_H,
+            target_dur=int(math.ceil(seg_d)) + 4
+        )
+        if ok and os.path.exists(norm_v):
+            vc = VideoFileClip(norm_v).without_audio()
+            open_res.append(vc)
+            bg_v = vc.subclip(0, min(seg_d, vc.duration)).set_duration(seg_d)
+        else:
+            bg_v = ColorClip(size=(SHORT_W, SHORT_H), color=(10, 20, 36), duration=seg_d)
 
-    if not segments:
+        ov_v = build_true_short_overlay_track(hook_badge, s_text, seg_d)
+        comp = CompositeVideoClip([bg_v, ov_v], size=(SHORT_W, SHORT_H)).set_duration(seg_d).set_audio(voice_a)
+        short_segments.append(comp)
+
+    if not short_segments:
         return False
-    final_short = concatenate_videoclips(segments, method="compose")
-    if final_short.duration > 57.5:
-        final_short = final_short.subclip(0, 57.5)
+    final_short = concatenate_videoclips(short_segments, method="compose")
+    if final_short.duration > 58.0:
+        final_short = final_short.subclip(0, 58.0)
     bg_m = generate_ambient_music(final_short.duration)
     final_short = final_short.set_audio(CompositeAudioClip([final_short.audio, bg_m]))
     final_short.write_videofile("output/short_video.mp4", fps=FPS, codec="libx264", audio_codec="aac", preset="ultrafast", threads=4, logger=None)
@@ -649,7 +819,7 @@ def build_companion_short(script_data, used_videos):
             r.close()
         except Exception:
             pass
-    print(f"Companion Short Ready: output/short_video.mp4 ({final_short.duration:.1f}s)")
+    print(f"Native 9:16 YouTube Short Ready: output/short_video.mp4 ({final_short.duration:.1f}s)")
     return True
 
 def main():
@@ -658,59 +828,59 @@ def main():
     used_videos = load_used_items(USED_VIDEOS_FILE)
     used_news = load_used_items(USED_NEWS_FILE)
 
-    topic = select_dr_berg_trending_topic()
-    script_data = generate_dr_berg_script(topic)
+    topic = fetch_live_google_trend_topic()
+    script_data = generate_dr_berg_masterclass_script(topic)
 
     final_segments, open_resources = [], []
-    timestamps, t_cursor = [], 0.0
+    timestamps = ["00:00 - Thrilling Introduction"]
+    t_cursor = 0.0
 
-    for sec in script_data["sections"]:
-        s_num = sec["section_num"]
-        s_title = sec["section_title"]
-        bullets = sec["board_bullets"]
-        flow_str = sec["mechanism_flow"]
-        v_query = sec["visual_query"]
+    print("Building Thrilling Intro Hook...")
+    intro_q = pick_visual_queries_for_text(script_data["intro_hook"], count=1)[0]
+    intro_seg = build_paragraph_video_segment(
+        0, script_data["title_options"][0], script_data["intro_hook"],
+        intro_q, "intro_hook", used_videos, open_resources
+    )
+    if intro_seg is not None:
+        final_segments.append(intro_seg)
+        t_cursor += intro_seg.duration
+
+    for pt in script_data["points"]:
+        p_num = pt["point_num"]
+        p_title = pt["point_title"]
+        p_sub = pt["point_subtitle"]
+        paras = pt["paragraphs"]
 
         mm, ss = int(t_cursor // 60), int(t_cursor % 60)
-        timestamps.append(f"{mm:02d}:{ss:02d} - Step {s_num}: {s_title}")
+        timestamps.append(f"{mm:02d}:{ss:02d} - Point {p_num}: {p_title}")
+        print(f"Building Point {p_num}/6: {p_title}")
 
-        print(f"Building Dr. Berg Section {s_num}/5: {s_title}")
-        bumper = create_section_bumper(s_num, s_title, flow_str, duration=2.3)
-        final_segments.append(bumper)
-        t_cursor += bumper.duration
+        card = create_classic_transition_card(p_num, p_title, p_sub, duration=2.8)
+        final_segments.append(card)
+        t_cursor += card.duration
 
-        sec_clips = []
-        for c_i in range(2):
-            rv, nv = f"temp/sec{s_num}_raw_{c_i}.mp4", f"temp/sec{s_num}_norm_{c_i}.mp4"
-            q_use = v_query if c_i == 0 else SAFE_MEDICAL_QUERIES[(s_num + c_i) % len(SAFE_MEDICAL_QUERIES)]
-            if search_and_download_video(q_use, rv, used_videos):
-                if normalize_clip_strict_aspect(rv, nv, W, H):
-                    sec_clips.append(nv)
+        queries = pick_visual_queries_for_text(" ".join(paras), count=3)
+        for p_idx, p_text in enumerate(paras):
+            v_q = queries[p_idx % len(queries)]
+            seg_tag = f"pt{p_num}_p{p_idx + 1}"
+            seg_clip = build_paragraph_video_segment(
+                p_num, p_title, p_text, v_q, seg_tag, used_videos, open_resources
+            )
+            if seg_clip is not None:
+                final_segments.append(seg_clip)
+                t_cursor += seg_clip.duration
 
-        for p_idx, p_text in enumerate(sec["paragraphs"]):
-            tts_file = f"temp/sec{s_num}_p{p_idx}.mp3"
-            if not generate_tts(p_text, tts_file):
-                continue
-            raw_a = AudioFileClip(tts_file)
-            open_resources.append(raw_a)
-            safe_voice_d = max(0.3, raw_a.duration - 0.06)
-            calm_audio = concatenate_audioclips([raw_a.subclip(0, safe_voice_d), make_silence_audio(0.42)])
-            seg_dur = calm_audio.duration
-
-            chosen_vid = sec_clips[p_idx % len(sec_clips)] if sec_clips else None
-            bg_v, loaded = loop_or_trim_clip(chosen_vid, seg_dur, w=W, h=H)
-            open_resources.extend(loaded)
-
-            ov_track = build_dr_berg_overlay_track(s_num, s_title, bullets, flow_str, p_idx, p_text, seg_dur)
-            comp = CompositeVideoClip([bg_v, ov_track], size=(W, H)).set_duration(seg_dur).set_audio(calm_audio)
-            final_segments.append(comp)
-            t_cursor += seg_dur
+    print("Building Warm Polite Outro...")
+    outro_seg = build_paragraph_video_segment(
+        0, "SUBSCRIBE, COMMENT & LIKE  |  MEDPULSE 5", script_data["outro"],
+        "doctor consulting patient in bright clinic", "outro_warm", used_videos, open_resources
+    )
+    if outro_seg is not None:
+        final_segments.append(outro_seg)
+        t_cursor += outro_seg.duration
 
     full_video = concatenate_videoclips(final_segments, method="compose")
-    if full_video.duration > 595.0:
-        full_video = full_video.subclip(0, 595.0)
-
-    print(f"Final Dr. Berg Style Video Duration: {full_video.duration / 60.0:.2f} minutes ({full_video.duration:.1f}s)")
+    print(f"Final Natural Dr. Berg Masterclass Duration: {full_video.duration / 60.0:.2f} minutes ({full_video.duration:.1f}s)")
     ambient = generate_ambient_music(full_video.duration)
     full_video = full_video.set_audio(CompositeAudioClip([full_video.audio, ambient]))
     full_video.write_videofile("output/final_video.mp4", fps=FPS, codec="libx264", audio_codec="aac", preset="ultrafast", threads=4, logger=None)
@@ -718,9 +888,9 @@ def main():
     try:
         build_companion_short(script_data, used_videos)
     except Exception as e:
-        print(f"Short warning: {e}")
+        print(f"Short generation warning: {e}")
 
-    ar_h1 = "=== \u0627\u0644\u0639\u0646\u0627\u0648\u064a\u0646 \u0627\u0644\u0645\u0642\u062a\u0631\u062d\u0629 (\u0623\u0633\u0644\u0648\u0628 \u062f\u0643\u062a\u0648\u0631 \u0628\u064a\u0631\u062c - \u0627\u062e\u062a\u0631 \u0627\u0644\u062e\u064a\u0627\u0631 1) ==="
+    ar_h1 = "=== \u0627\u0644\u0639\u0646\u0627\u0648\u064a\u0646 \u0627\u0644\u0645\u0642\u062a\u0631\u062d\u0629 (\u062a\u0631\u0646\u062f \u0627\u0644\u0628\u062d\u062b \u0627\u0644\u062d\u064a \u0628\u0623\u0633\u0644\u0648\u0628 \u062f\u0643\u062a\u0648\u0631 \u0628\u064a\u0631\u062c) ==="
     ar_opt1 = "\u0627\u0644\u062e\u064a\u0627\u0631 1 (\u0645\u0648\u0635\u0649 \u0628\u0647): "
     ar_opt2 = "\u0627\u0644\u062e\u064a\u0627\u0631 2: "
     ar_opt3 = "\u0627\u0644\u062e\u064a\u0627\u0631 3: "
@@ -740,15 +910,16 @@ def main():
         "",
         ar_h3,
         f"Short Title: {script_data['short_script']['short_title']}",
-        f"Short Description: Watch the full step-by-step protocol on MedPulse 5: {script_data['title_options'][0]} #Shorts #HealthTips #NaturalRemedies #Nutrition",
+        f"Short Description: Watch the full deep dive on MedPulse 5: {script_data['title_options'][0]} #Shorts #Health #NaturalRemedies #Nutrition",
         "",
         ar_h4,
         script_data["description"],
         "",
-        "Step-by-Step Video Chapters:",
+        "Video Chapters:",
         *timestamps,
         "",
-        "Educational Disclaimer: This video is for informational and educational purposes only and is not medical advice.",
+        f"Trending Search Reference: {topic['title']}",
+        "Educational Disclaimer: This video is for informational and educational purposes only and does not substitute personal medical advice.",
         "",
         ar_h5,
         script_data["tags"]
@@ -765,7 +936,7 @@ def main():
             r.close()
         except Exception:
             pass
-    print("ALL DONE! Dr. Berg Style Long Video + Distortion-Free Short Ready.")
+    print("ALL DONE! Live Trend Dr. Berg Video + True 9:16 Short Ready.")
 
 if __name__ == "__main__":
     main()
