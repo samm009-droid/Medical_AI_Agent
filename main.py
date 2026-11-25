@@ -18,11 +18,11 @@ W, H = 1280, 720
 SW, SH = 1080, 1920
 FPS = 24
 CHANNEL_NAME = "MEDPULSE DAILY"
+LOGO_PATH = "logo.jpeg"
 VOICE_NAME = "en-US-ChristopherNeural"
 VOICE_RATE = "-4%"
 VOICE_PITCH = "-2Hz"
 MIN_LONG_SEC = 560.0
-LOGO_CANDIDATES = ["logo.jpeg", "logo.jpg", "logo.png", "\u062a\u0646\u0632\u064a\u0644.jpeg"]
 USED_NEWS_FILE = "used_news.txt"
 USED_VIDEOS_FILE = "used_videos.txt"
 
@@ -35,12 +35,6 @@ BANNED = [
     r"\bdr\.?\s*mindy\b", r"\bdr\.?\s*oz\b", r"\bdr\.?\s*hyman\b", r"\bdr\.?\s*huberman\b",
     r"\bdoctor\s+[a-z]+\b", r"\bdr\.?\s+[a-z]+\b", r"\bprofessor\s+[a-z]+\b"
 ]
-
-def get_logo_path():
-    for p in LOGO_CANDIDATES:
-        if os.path.exists(p):
-            return p
-    return LOGO_CANDIDATES[0]
 
 def clean_txt(t):
     if not t:
@@ -87,6 +81,36 @@ def wrap_lines(txt, font, max_w, draw):
     if cur:
         lines.append(cur)
     return lines
+
+def split_timed_subs(txt, total_dur, max_words=13):
+    words = clean_txt(txt).split()
+    if not words:
+        return [("", total_dur)]
+    chunks = []
+    cur = []
+    for w in words:
+        cur.append(w)
+        if len(cur) >= max_words or (len(cur) >= 7 and w.endswith((".", "!", "?", ",", ";", ":"))):
+            chunks.append(" ".join(cur))
+            cur = []
+    if cur:
+        if chunks and len(cur) <= 3:
+            chunks[-1] = chunks[-1] + " " + " ".join(cur)
+        else:
+            chunks.append(" ".join(cur))
+    tot_chars = max(1, sum(len(c) for c in chunks))
+    out = []
+    acc = 0.0
+    for i, c in enumerate(chunks):
+        if i == len(chunks) - 1:
+            d = max(0.4, total_dur - acc)
+        else:
+            d = round(max(0.8, total_dur * (len(c) / float(tot_chars))), 3)
+            if acc + d > total_dur - 0.4:
+                d = max(0.4, total_dur - acc - 0.4)
+        out.append((c, d))
+        acc += d
+    return out
 
 LIVE_FEEDS = [
     ("Google Trends US", "https://trends.google.com/trending/rss?geo=US"),
@@ -183,37 +207,43 @@ def fetch_live_trend():
 
 def generate_script(tr):
     prompt = "\n".join([
-        "You are an elite medical educator and viral documentary scriptwriter for MedPulse Daily.",
+        "You are an elite viral medical documentary writer for MedPulse Daily.",
         "Today's Live Trending Health Topic: " + tr["title"],
         "Context: " + tr["summary"],
+        "STYLE: Suspenseful Countdown from Rank 6 down to Rank 1 (The #1 Most Shocking Warning/Mistake).",
         "STRICT RULES:",
         "1. NEVER mention any doctor's name or person's name anywhere.",
-        "2. NEVER include website links or URLs in spoken text or subtitles.",
-        "3. Use SIMPLE everyday English with vivid real-life analogies (car dashboard warning light, clogged kitchen filter, dish soap dissolving grease, rusted lock and key) and clear daily food/symptom examples.",
-        "4. Write 6 sequential points with 4 paragraphs per point (24 body paragraphs total, 52-65 words each).",
-        "5. Score each paragraph with thrill_score from 1 to 100 based on how shocking, suspenseful, and curiosity-inducing it is so our automated editor can extract the most thrilling clips for a viral Short.",
+        "2. NEVER include website links or URLs in spoken text.",
+        "3. Use SIMPLE everyday English, vivid real-life analogies (car dashboard warning light, clogged kitchen filter, dish soap dissolving grease), and clear food/symptom examples.",
+        "4. Create 6 countdown ranks ordered from rank 6 down to rank 1. Each rank MUST have 4 dramatic paragraphs (24 body paragraphs total, 52-65 words each):",
+        "   - Paragraph 1: The shocking everyday symptom or silent body alarm.",
+        "   - Paragraph 2: Minute-by-minute journey inside the organs using a simple analogy.",
+        "   - Paragraph 3: The hidden daily mistake or food trap people think is harmless.",
+        "   - Paragraph 4: The 24-hour natural kitchen rescue fix.",
+        "5. Every single paragraph MUST have its own unique changing 'headline' (4 to 6 uppercase words) for the top-left live news ticker.",
+        "6. Score each paragraph with thrill_score (1 to 100) so the editor can clip the most thrilling moments for the Short.",
         "Return ONLY valid JSON with this exact structure:",
         "{",
-        '  "video_title": "Viral title (no person names)",',
+        '  "video_title": "Viral Countdown Title (no person names)",',
         '  "short_title": "Viral Short title under 65 chars",',
         '  "thumbnail_hook": "3 TO 4 UPPERCASE WORDS",',
-        '  "intro_hook": "55-word shocking opening warning hook with a real-life symptom example",',
-        '  "intro_sub": "12-word gripping subtitle for intro",',
+        '  "intro_headline": "BREAKING BODY COUNTDOWN",',
+        '  "intro_hook": "55-word high-suspense opening hook teasing the countdown from #6 to the shocking #1 body signal...",',
         '  "intro_query": "human body medical scan",',
         '  "points": [',
         "    {",
-        '      "point_number": 1,',
+        '      "rank": 6,',
         '      "point_title": "Short 4-word title",',
         '      "paragraphs": [',
-        '        {"text": "55-word shocking hidden symptom reveal...", "sub": "12-word subtitle", "q1": "tired person headache", "q2": "human cells microscope", "thrill_score": 98},',
-        '        {"text": "55-word simple everyday analogy...", "sub": "12-word subtitle", "q1": "blood flow arteries", "q2": "heart beating medical", "thrill_score": 75},',
-        '        {"text": "55-word shocking daily mistake people make...", "sub": "12-word subtitle", "q1": "sugar soda drink", "q2": "liver digestion medical", "thrill_score": 95},',
-        '        {"text": "55-word practical food fix...", "sub": "12-word subtitle", "q1": "fresh green vegetables", "q2": "lemon water glass", "thrill_score": 82}',
+        '        {"headline": "SILENT MORNING ALARM", "text": "55-word shocking symptom reveal...", "q1": "tired person waking up", "q2": "human nerve cells", "thrill_score": 96},',
+        '        {"headline": "INSIDE YOUR BLOODSTREAM", "text": "55-word organ journey with simple analogy...", "q1": "blood flow arteries", "q2": "heart beating medical", "thrill_score": 80},',
+        '        {"headline": "THE HIDDEN DAILY TRAP", "text": "55-word shocking daily mistake...", "q1": "sugar coffee cup", "q2": "liver digestion medical", "thrill_score": 94},',
+        '        {"headline": "24-HOUR NATURAL RESET", "text": "55-word practical kitchen food fix...", "q1": "fresh green vegetables", "q2": "lemon water glass", "thrill_score": 85}',
         "      ]",
         "    }",
         "  ],",
-        '  "outro": "45-word warm conclusion asking viewers to like, subscribe to MedPulse Daily, and share their experience in the comments.",',
-        '  "outro_sub": "Like, subscribe to MedPulse Daily, and comment below!",',
+        '  "outro_headline": "PROTECT YOUR HEALTH DAILY",',
+        '  "outro": "45-word warm conclusion asking viewers to like, subscribe to MedPulse Daily, and comment which countdown sign surprised them most.",',
         '  "seo_description": "3-paragraph engaging summary (no links, no person names).",',
         '  "seo_tags": ["health", "wellness", "nutrition", "symptoms", "science"]',
         "}"
@@ -230,28 +260,29 @@ def generate_script(tr):
         except Exception:
             time.sleep(2)
     pts = []
-    for i in range(1, 7):
+    ranks = [6, 5, 4, 3, 2, 1]
+    for rnk in ranks:
         pts.append({
-            "point_number": i,
-            "point_title": f"Hidden Body Signal {i}",
+            "rank": rnk,
+            "point_title": f"Critical Body Signal #{rnk}",
             "paragraphs": [
-                {"text": f"Here is shocking warning sign number {i} linked to {tr['title']}. Just like a red check-engine light flashing on your car dashboard, your cells send out urgent distress signals through sudden afternoon exhaustion, brain fog, or muscle tightness long before standard tests spot the danger.", "sub": f"Warning sign {i} flashes like a car dashboard alert.", "q1": "tired person rubbing eyes", "q2": "medical nerve signal", "thrill_score": 97},
-                {"text": "Inside your bloodstream, microscopic cellular pumps work nonstop to balance fluids and minerals. Think of this system like a kitchen water filter: when excess sugar and stress hormones accumulate, the filter clogs up and energy delivery drops.", "sub": "Cellular pumps clog up like an overworked water filter.", "q1": "blood cells flowing", "q2": "science laboratory", "thrill_score": 74},
-                {"text": "The biggest hidden mistake millions make every morning is consuming refined sugar or dehydrating drinks on an empty stomach. That single habit acts like pouring sticky syrup onto delicate clockwork gears, forcing your liver and pancreas into emergency overdrive.", "sub": "Morning sugar habits overload your organs like sticky syrup.", "q1": "pouring sugary soda", "q2": "doctor checking patient", "thrill_score": 94},
-                {"text": "You can start reversing this internal stress tonight with a simple kitchen swap. Add mineral-rich leafy greens, pumpkin seeds, avocado, and clean water with a pinch of sea salt to your meal so your cells recharge naturally.", "sub": "Mineral-rich whole foods recharge cellular energy naturally.", "q1": "fresh spinach avocado", "q2": "happy healthy person", "thrill_score": 80}
+                {"headline": f"SILENT WARNING SIGNAL #{rnk}", "text": f"Coming in at number {rnk} on our countdown of {tr['title']} is a silent distress signal millions ignore. Just like a red check-engine light flashing on your car dashboard, sudden afternoon exhaustion, stubborn brain fog, or nighttime muscle tightness warns you that your cells are running dangerously low on key nutrients.", "q1": "tired person rubbing eyes", "q2": "medical nerve signal", "thrill_score": 97},
+                {"headline": f"INSIDE YOUR CELLS AT #{rnk}", "text": "Within minutes of this imbalance, microscopic pumps inside your organs struggle to move fluids and electrolytes. Picture a kitchen water filter clogged with sediment: when stress hormones and excess glucose build up, oxygen and energy delivery to your brain and heart slows down.", "q1": "blood cells flowing", "q2": "science laboratory", "thrill_score": 78},
+                {"headline": f"HIDDEN DAILY MISTAKE #{rnk}", "text": "The biggest hidden trap that accelerates this damage is starting your morning with refined sugar or dehydrating drinks on an empty stomach. That everyday habit acts like pouring sticky syrup onto delicate clockwork gears, forcing your liver into emergency overdrive.", "q1": "pouring sugary soda", "q2": "doctor checking patient", "thrill_score": 95},
+                {"headline": f"24-HOUR KITCHEN RESCUE #{rnk}", "text": "Here is how you reverse this within twenty-four hours using your kitchen. Pair mineral-rich leafy greens, pumpkin seeds, and avocado with clean water and a pinch of sea salt so your cells absorb nutrients smoothly and restore natural energy.", "q1": "fresh spinach avocado", "q2": "happy healthy person", "thrill_score": 84}
             ]
         })
     return {
-        "video_title": clean_txt(tr["title"]) + " - 6 Early Warning Signs & Natural Fixes",
-        "short_title": "Never Ignore These Shocking Body Warning Signs!",
-        "thumbnail_hook": "SILENT BODY ALARM",
-        "intro_hook": f"Stop and check how your body feels right now! Could your everyday fatigue, sudden cravings, or restless sleep actually be a silent alarm? Today on MedPulse Daily we uncover the science behind {clean_txt(tr['title'])} with simple examples.",
-        "intro_sub": "Your daily fatigue or cravings could be a silent body alarm!",
+        "video_title": clean_txt(tr["title"]) + " - Countdown From #6 To The #1 Shocking Sign",
+        "short_title": "Wait Until You See The #1 Body Warning Sign!",
+        "thumbnail_hook": "#1 SILENT BODY ALARM",
+        "intro_headline": "URGENT HEALTH COUNTDOWN",
+        "intro_hook": f"Stop and check how your body feels right now! We are counting down the six most shocking warning signs behind {clean_txt(tr['title'])}, starting at number six and building up to the number one silent mistake that catches ninety percent of people off guard.",
         "intro_query": "human body scan medical",
         "points": pts,
-        "outro": "Thank you for watching MedPulse Daily! If these simple examples helped you understand your body better, please hit the like button, subscribe to our channel, and tell us in the comments which warning sign surprised you most!",
-        "outro_sub": "Hit like, subscribe to MedPulse Daily, and comment below!",
-        "seo_description": f"Discover the science and everyday examples behind {clean_txt(tr['title'])}. Learn the 6 warning signs and natural food habits to protect your health.",
+        "outro_headline": "JOIN MEDPULSE DAILY",
+        "outro": "Thank you for watching MedPulse Daily! If this countdown helped you spot what your body is telling you, hit the like button, subscribe to our channel, and tell us in the comments if number one surprised you!",
+        "seo_description": f"We count down the 6 most important warning signs and natural fixes for {clean_txt(tr['title'])} using simple real-life examples.",
         "seo_tags": ["health", "nutrition", "symptoms", "wellness", "medicalscience"]
     }
 
@@ -374,8 +405,8 @@ def export_final_mp4(clip_obj, wav_list, out_mp4):
     clip_obj.write_videofile(tmp_v, fps=FPS, codec="libx264", audio=False, preset="ultrafast", threads=4, logger=None)
     subprocess.run([FFMPEG_EXE, "-y", "-i", tmp_v, "-i", tmp_a, "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-shortest", out_mp4], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-def paste_logo(img, sz=68, cx=W - 92, top_y=14, f_sz=13):
-    lp = get_logo_path()
+def paste_logo(img, sz=64, cx=W - 90, top_y=12, f_sz=13):
+    lp = LOGO_PATH if os.path.exists(LOGO_PATH) else "\u062a\u0646\u0632\u064a\u0644.jpeg"
     lx = cx - (sz // 2)
     if os.path.exists(lp):
         try:
@@ -392,42 +423,58 @@ def paste_logo(img, sz=68, cx=W - 92, top_y=14, f_sz=13):
     fn = get_font(f_sz, True)
     bb = dr.textbbox((0, 0), CHANNEL_NAME, font=fn)
     tw, th = bb[2] - bb[0], bb[3] - bb[1]
-    pad_x, pad_y = 10, 4
-    bx1 = cx - (tw // 2) - pad_x
-    bx2 = cx + (tw // 2) + pad_x
-    by1 = top_y + sz + 5
-    by2 = by1 + th + (pad_y * 2) + 2
+    bx1, bx2 = cx - (tw // 2) - 9, cx + (tw // 2) + 9
+    by1, by2 = top_y + sz + 5, top_y + sz + th + 15
     dr.rounded_rectangle([(bx1, by1), (bx2, by2)], radius=6, fill=(8, 16, 34, 240), outline=(255, 205, 0, 230), width=2)
-    dr.text((cx - (tw // 2), by1 + pad_y - 1), CHANNEL_NAME, font=fn, fill=(255, 215, 0, 255))
+    dr.text((cx - (tw // 2), by1 + 3), CHANNEL_NAME, font=fn, fill=(255, 215, 0, 255))
 
-def make_overlay(p_num, p_title, sub_txt, dur):
+def make_frame_img(badge_txt, headline_txt, sub_chunk):
     img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     dr = ImageDraw.Draw(img)
-    dr.rectangle([(0, H - 175), (W, H)], fill=(8, 14, 26, 205))
-    dr.rectangle([(0, H - 175), (W, H - 171)], fill=(220, 38, 38, 255))
-    badge = f"POINT {p_num}" if p_num else "DAILY HEALTH TREND"
-    f_b, f_t, f_s = get_font(20, True), get_font(22, True), get_font(27, True)
-    dr.rounded_rectangle([(36, 24), (245, 64)], radius=8, fill=(200, 30, 30, 235))
-    dr.text((50, 32), badge, font=f_b, fill=(255, 255, 255, 255))
-    if p_title:
-        dr.rounded_rectangle([(255, 24), (790, 64)], radius=8, fill=(15, 23, 42, 210))
-        dr.text((270, 31), clean_txt(p_title).upper()[:38], font=f_t, fill=(255, 215, 0, 255))
-    paste_logo(img, sz=66, cx=W - 92, top_y=12, f_sz=13)
-    y = H - 150
-    for ln in wrap_lines(sub_txt, f_s, W - 110, dr)[:3]:
-        bb = dr.textbbox((0, 0), ln, font=f_s)
-        x = (W - (bb[2] - bb[0])) // 2
-        dr.text((x + 2, y + 2), ln, font=f_s, fill=(0, 0, 0, 240))
-        dr.text((x, y), ln, font=f_s, fill=(255, 255, 255, 255))
-        y += 40
-    return ImageClip(np.array(img)).set_duration(dur)
+    f_b, f_h, f_s = get_font(19, True), get_font(20, True), get_font(25, True)
+    b_str = clean_txt(badge_txt).upper()
+    h_str = clean_txt(headline_txt).upper()[:42]
+    bb_b = dr.textbbox((0, 0), b_str, font=f_b)
+    bw = (bb_b[2] - bb_b[0]) + 28
+    dr.rounded_rectangle([(24, 16), (24 + bw, 54)], radius=8, fill=(210, 28, 28, 240), outline=(255, 205, 0, 220), width=2)
+    dr.text((38, 24), b_str, font=f_b, fill=(255, 255, 255, 255))
+    if h_str:
+        bb_h = dr.textbbox((0, 0), h_str, font=f_h)
+        hw = min(W - bw - 230, (bb_h[2] - bb_h[0]) + 30)
+        hx1 = 32 + bw
+        dr.rounded_rectangle([(hx1, 16), (hx1 + hw, 54)], radius=8, fill=(8, 16, 34, 225), outline=(255, 205, 0, 190), width=2)
+        dr.text((hx1 + 14, 24), h_str, font=f_h, fill=(255, 215, 0, 255))
+    paste_logo(img, sz=64, cx=W - 90, top_y=12, f_sz=13)
+    if sub_chunk:
+        lines = wrap_lines(sub_chunk, f_s, W - 220, dr)[:2]
+        bar_h = 44 if len(lines) == 1 else 78
+        by1 = H - bar_h - 12
+        by2 = H - 12
+        dr.rounded_rectangle([(74, by1), (W - 74, by2)], radius=12, fill=(6, 12, 24, 195), outline=(255, 205, 0, 180), width=2)
+        y = by1 + 9
+        for ln in lines:
+            bb = dr.textbbox((0, 0), ln, font=f_s)
+            x = (W - (bb[2] - bb[0])) // 2
+            dr.text((x + 2, y + 2), ln, font=f_s, fill=(0, 0, 0, 245))
+            dr.text((x, y), ln, font=f_s, fill=(255, 255, 255, 255))
+            y += 33
+    return np.array(img)
 
-def make_card(p_num, p_title, dur=2.8):
+def build_synced_scene(vc, badge_txt, headline_txt, spoken_txt, dur):
+    chunks = split_timed_subs(spoken_txt, dur, max_words=13)
+    ov_clips = []
+    for sub_c, c_dur in chunks:
+        arr = make_frame_img(badge_txt, headline_txt, sub_c)
+        ov_clips.append(ImageClip(arr).set_duration(c_dur))
+    ov_track = concatenate_videoclips(ov_clips, method="chain").set_duration(dur)
+    return CompositeVideoClip([vc, ov_track])
+
+def make_card(rank_num, p_title, dur=2.8):
     img = Image.new("RGBA", (W, H), (10, 18, 34, 255))
     dr = ImageDraw.Draw(img)
     dr.rectangle([(70, 60), (W - 70, H - 60)], outline=(255, 200, 0, 220), width=4)
-    f1, f2 = get_font(34, True), get_font(52, True)
-    tag = f"POINT {p_num} OF 6"
+    f1, f2 = get_font(34, True), get_font(50, True)
+    tag = f"COUNTDOWN #{rank_num}" if rank_num > 1 else "NUMBER #1: THE BIGGEST SHOCK"
     b1 = dr.textbbox((0, 0), tag, font=f1)
     dr.rounded_rectangle([((W - (b1[2] - b1[0]) - 60) // 2, 195), ((W + (b1[2] - b1[0]) + 60) // 2, 255)], radius=12, fill=(210, 35, 35, 255))
     dr.text(((W - (b1[2] - b1[0])) // 2, 207), tag, font=f1, fill=(255, 255, 255, 255))
@@ -435,74 +482,96 @@ def make_card(p_num, p_title, dur=2.8):
     for ln in wrap_lines(clean_txt(p_title).upper(), f2, W - 220, dr)[:2]:
         b2 = dr.textbbox((0, 0), ln, font=f2)
         dr.text(((W - (b2[2] - b2[0])) // 2, y), ln, font=f2, fill=(255, 215, 0, 255))
-        y += 68
+        y += 66
     paste_logo(img, sz=76, cx=W - 155, top_y=76, f_sz=14)
     return ImageClip(np.array(img)).set_duration(dur)
 
 def calc_excitement(rec):
     txt = rec["text"].lower()
-    val = int(rec.get("ai_thrill", 80)) * 2
-    hot_words = [
-        "shocking", "warning", "danger", "silent", "mistake", "secret", "hidden",
-        "never", "stop", "instantly", "emergency", "alarm", "damage", "toxic",
-        "clogged", "dashboard", "check-engine", "overnight", "sudden", "urgent", "trap"
-    ]
-    for hw in hot_words:
+    val = int(rec.get("ai_thrill", 85)) * 2
+    for hw in ["shocking", "warning", "danger", "silent", "mistake", "secret", "hidden", "never", "stop", "instantly", "emergency", "alarm", "damage", "toxic", "clogged", "dashboard", "check-engine", "overnight", "sudden", "urgent", "trap"]:
         if hw in txt:
             val += 15
+    if rec.get("rank") in (1, 2):
+        val += 22
     if rec.get("para_idx") in (1, 3):
         val += 25
     if 6.5 <= rec.get("dur", 10.0) <= 15.0:
         val += 18
     return val
 
-def save_short_ov_png(badge_txt, sub_txt, out_png):
+def save_short_ov_png(badge_txt, headline_txt, sub_chunk, out_png):
     img = Image.new("RGBA", (SW, SH), (0, 0, 0, 0))
     dr = ImageDraw.Draw(img)
-    dr.rectangle([(0, 0), (SW, 220)], fill=(6, 12, 24, 180))
-    dr.rectangle([(0, SH - 560), (SW, SH)], fill=(6, 12, 24, 220))
-    dr.rectangle([(0, SH - 560), (SW, SH - 554)], fill=(255, 205, 0, 255))
-    f_b, f_s = get_font(30, True), get_font(44, True)
-    dr.rounded_rectangle([(42, 58), (690, 128)], radius=14, fill=(215, 30, 30, 245))
-    dr.text((66, 75), clean_txt(badge_txt).upper()[:28], font=f_b, fill=(255, 255, 255, 255))
-    paste_logo(img, sz=94, cx=SW - 115, top_y=24, f_sz=18)
-    y = SH - 500
-    for ln in wrap_lines(sub_txt, f_s, SW - 110, dr)[:4]:
-        bb = dr.textbbox((0, 0), ln, font=f_s)
-        x = (SW - (bb[2] - bb[0])) // 2
-        dr.text((x + 3, y + 3), ln, font=f_s, fill=(0, 0, 0, 255))
-        dr.text((x, y), ln, font=f_s, fill=(255, 230, 0, 255))
-        y += 62
+    f_b, f_h, f_s = get_font(27, True), get_font(28, True), get_font(38, True)
+    b_str = clean_txt(badge_txt).upper()[:24]
+    h_str = clean_txt(headline_txt).upper()[:30]
+    bb_b = dr.textbbox((0, 0), b_str, font=f_b)
+    bw = (bb_b[2] - bb_b[0]) + 36
+    dr.rounded_rectangle([(34, 42), (34 + bw, 96)], radius=12, fill=(215, 28, 28, 245), outline=(255, 205, 0, 230), width=2)
+    dr.text((52, 54), b_str, font=f_b, fill=(255, 255, 255, 255))
+    if h_str:
+        bb_h = dr.textbbox((0, 0), h_str, font=f_h)
+        hw = min(SW - 270, (bb_h[2] - bb_h[0]) + 36)
+        dr.rounded_rectangle([(34, 104), (34 + hw, 158)], radius=12, fill=(8, 16, 34, 230), outline=(255, 205, 0, 210), width=2)
+        dr.text((52, 116), h_str, font=f_h, fill=(255, 215, 0, 255))
+    paste_logo(img, sz=90, cx=SW - 112, top_y=30, f_sz=17)
+    if sub_chunk:
+        lines = wrap_lines(sub_chunk, f_s, SW - 120, dr)[:2]
+        bar_h = 84 if len(lines) == 1 else 142
+        by1 = SH - bar_h - 140
+        by2 = SH - 140
+        dr.rounded_rectangle([(42, by1), (SW - 42, by2)], radius=18, fill=(6, 12, 24, 205), outline=(255, 205, 0, 210), width=3)
+        y = by1 + 16
+        for ln in lines:
+            bb = dr.textbbox((0, 0), ln, font=f_s)
+            x = (SW - (bb[2] - bb[0])) // 2
+            dr.text((x + 3, y + 3), ln, font=f_s, fill=(0, 0, 0, 255))
+            dr.text((x, y), ln, font=f_s, fill=(255, 230, 0, 255))
+            y += 54
     img.save(out_png)
+
+def render_short_synced_item(it, item_idx):
+    chunks = split_timed_subs(it["text"], it["dur"], max_words=9)
+    sub_mp4s = []
+    cur_t = 0.0
+    vf = f"[0:v]scale=-2:{SH}:flags=lanczos,crop={SW}:{SH}:(iw-{SW})/2:0,setsar=1:1,fps={FPS}[bg];[bg][1:v]overlay=0:0,setsar=1:1,setdar=9/16[v]"
+    for c_i, (sub_c, c_dur) in enumerate(chunks):
+        ov_p = f"temp/sh_ov_{item_idx}_{c_i}.png"
+        part_p = f"temp/sh_sub_{item_idx}_{c_i}.mp4"
+        save_short_ov_png(it["badge"], it["headline"], sub_c, ov_p)
+        subprocess.run([FFMPEG_EXE, "-y", "-stream_loop", "-1", "-ss", f"{cur_t:.3f}", "-i", it["vpath"], "-loop", "1", "-i", ov_p, "-t", f"{c_dur:.3f}", "-filter_complex", vf, "-map", "[v]", "-an", "-aspect", "9:16", "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", part_p], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if os.path.exists(part_p) and os.path.getsize(part_p) > 8000:
+            sub_mp4s.append(os.path.abspath(part_p))
+        cur_t += c_dur
+    return sub_mp4s
 
 def build_short_from_long(hook_rec, body_records):
     ranked = sorted(body_records, key=calc_excitement, reverse=True)
-    chosen, used_pts = [], set()
+    chosen, used_rnks = [], set()
     cur_sec = hook_rec["dur"]
     for r in ranked:
-        if r["point_num"] in used_pts and len(chosen) < 3:
+        if r["rank"] in used_rnks and len(chosen) < 3:
             continue
         if cur_sec + r["dur"] <= 51.0 or len(chosen) < 2:
             chosen.append(r)
-            used_pts.add(r["point_num"])
+            used_rnks.add(r["rank"])
             cur_sec += r["dur"]
         if len(chosen) >= 4 or cur_sec >= 46.0:
             break
     chosen.sort(key=lambda x: calc_excitement(x))
     cta_wav = "temp/sh_cta.wav"
-    cta_dur = gen_wav("Don't miss the other warning signs and natural fixes! Watch the full video on MedPulse Daily right now and subscribe!", cta_wav, rate="+2%")
+    cta_txt = "Want to see the number one shocking sign and all natural fixes? Watch the full countdown on MedPulse Daily right now and subscribe!"
+    cta_dur = gen_wav(cta_txt, cta_wav, rate="+2%")
     seq = [hook_rec]
     for c in chosen:
-        seq.append({"badge": "SHOCKING REVEAL " + str(c["point_num"]), "sub": c["sub"], "vpath": c["vpath"], "apath": c["apath"], "dur": c["dur"]})
-    seq.append({"badge": "WATCH FULL VIDEO", "sub": "Watch the full video on MedPulse Daily for all 6 steps!", "vpath": hook_rec["vpath"], "apath": cta_wav, "dur": cta_dur})
+        seq.append({"badge": f"COUNTDOWN #{c['rank']}", "headline": c["headline"], "text": c["text"], "vpath": c["vpath"], "apath": c["apath"], "dur": c["dur"]})
+    seq.append({"badge": "FULL COUNTDOWN", "headline": "WATCH #1 ON MEDPULSE DAILY", "text": cta_txt, "vpath": hook_rec["vpath"], "apath": cta_wav, "dur": cta_dur})
     v_parts, w_parts = [], []
-    vf = f"[0:v]scale=-2:{SH}:flags=lanczos,crop={SW}:{SH}:(iw-{SW})/2:0,setsar=1:1,fps={FPS}[bg];[bg][1:v]overlay=0:0,setsar=1:1,setdar=9/16[v]"
     for i, it in enumerate(seq):
-        ov_p, sc_mp4 = f"temp/sh_ov_{i}.png", f"temp/sh_part_{i}.mp4"
-        save_short_ov_png(it["badge"], it["sub"], ov_p)
-        subprocess.run([FFMPEG_EXE, "-y", "-stream_loop", "-1", "-i", it["vpath"], "-loop", "1", "-i", ov_p, "-t", f"{it['dur']:.3f}", "-filter_complex", vf, "-map", "[v]", "-an", "-aspect", "9:16", "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", sc_mp4], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        if os.path.exists(sc_mp4) and os.path.getsize(sc_mp4) > 15000:
-            v_parts.append(os.path.abspath(sc_mp4))
+        subs = render_short_synced_item(it, i)
+        if subs:
+            v_parts.extend(subs)
             w_parts.append(it["apath"])
     lst_p, silent_sh, master_w = "temp/sh_concat.txt", "temp/sh_silent.mp4", "temp/sh_master.wav"
     with open(lst_p, "w", encoding="utf-8") as f:
@@ -521,7 +590,7 @@ def write_details(tr, sc):
     hash_str = " ".join(["\x23" + t for t in tags[:12]])
     v_title = clean_txt(sc.get("video_title", tr["title"]))
     s_title = clean_txt(sc.get("short_title", v_title))
-    thumb_hook = clean_txt(sc.get("thumbnail_hook", "BODY WARNING SIGNS")).upper()
+    thumb_hook = clean_txt(sc.get("thumbnail_hook", "#1 BODY WARNING")).upper()
     body = "\n".join([
         "==========================================",
         "1. LONG VIDEO TITLE (COPY & PASTE):",
@@ -559,64 +628,69 @@ def main():
     cur_t, idx = 0.0, 0
 
     aw = f"temp/a_{idx}.wav"
-    dur = gen_wav(sc.get("intro_hook", tr["title"]), aw)
+    i_txt = sc.get("intro_hook", tr["title"])
+    i_head = sc.get("intro_headline", "BREAKING HEALTH COUNTDOWN")
+    dur = gen_wav(i_txt, aw)
     v1 = dl_pexels(sc.get("intro_query", "medical health"), f"{idx}_a")
     v2 = dl_pexels("human body anatomy", f"{idx}_b")
     vp = prep_two(v1, v2, dur, f"temp/prep_{idx}.mp4")
-    clips.append(CompositeVideoClip([VideoFileClip(vp).subclip(0, dur), make_overlay(0, "TODAY'S TOP HEALTH TREND", sc.get("intro_sub", tr["title"]), dur)]))
+    clips.append(build_synced_scene(VideoFileClip(vp).subclip(0, dur), "LIVE ALERT", i_head, i_txt, dur))
     wavs.append(aw)
-    hook_rec = {"badge": "URGENT HEALTH ALERT", "sub": sc.get("intro_sub", tr["title"]), "vpath": vp, "apath": aw, "dur": dur}
+    hook_rec = {"badge": "URGENT ALERT", "headline": i_head, "text": i_txt, "vpath": vp, "apath": aw, "dur": dur}
     cur_t += dur
     idx += 1
 
     chime_p = "temp/chime.wav"
     make_chime_wav(chime_p, 2.8)
 
-    for pt in sc.get("points", [])[:6]:
-        pnum = pt.get("point_number", 1)
-        ptitle = pt.get("point_title", f"Key Signal {pnum}")
-        clips.append(make_card(pnum, ptitle, 2.8))
+    default_Ranks = [6, 5, 4, 3, 2, 1]
+    for pt_i, pt in enumerate(sc.get("points", [])[:6]):
+        rnk = pt.get("rank", default_Ranks[pt_i])
+        ptitle = pt.get("point_title", f"Critical Body Signal #{rnk}")
+        clips.append(make_card(rnk, ptitle, 2.8))
         wavs.append(chime_p)
         cur_t += 2.8
         for p_i, para in enumerate(pt.get("paragraphs", [])[:4], 1):
             aw = f"temp/a_{idx}.wav"
             p_txt = para.get("text", "")
-            p_sub = para.get("sub", p_txt[:85])
+            p_head = para.get("headline", ptitle)
             dur = gen_wav(p_txt, aw)
             v1 = dl_pexels(para.get("q1", "medical health"), f"{idx}_a")
             v2 = dl_pexels(para.get("q2", "healthy nutrition"), f"{idx}_b")
             vp = prep_two(v1, v2, dur, f"temp/prep_{idx}.mp4")
-            clips.append(CompositeVideoClip([VideoFileClip(vp).subclip(0, dur), make_overlay(pnum, ptitle, p_sub, dur)]))
+            clips.append(build_synced_scene(VideoFileClip(vp).subclip(0, dur), f"COUNTDOWN #{rnk}", p_head, p_txt, dur))
             wavs.append(aw)
-            body_records.append({"idx": idx, "point_num": pnum, "para_idx": p_i, "text": p_txt, "sub": p_sub, "vpath": vp, "apath": aw, "dur": dur, "ai_thrill": para.get("thrill_score", 85)})
+            body_records.append({"idx": idx, "rank": rnk, "para_idx": p_i, "headline": p_head, "text": p_txt, "vpath": vp, "apath": aw, "dur": dur, "ai_thrill": para.get("thrill_score", 88)})
             cur_t += dur
             idx += 1
 
     bonus_list = [
-        ("Let us look at a practical kitchen example you can apply today. When you pair healthy fats like extra-virgin olive oil or avocado with colorful vegetables, your digestive tract absorbs fat-soluble vitamins up to four times more effectively than eating plain salads alone.", "Healthy fats boost vitamin absorption up to four times.", "olive oil salad", "fresh avocado vegetables"),
-        ("Another everyday example happens during the last two hours before bedtime. Replacing bright phone screens and late-night snacks with a warm cup of chamomile tea or magnesium-rich almonds signals your nervous system to lower stress hormones and begin deep cellular repair.", "Evening habits lower stress hormones and trigger cellular repair.", "chamomile tea cup", "almonds nuts healthy"),
-        ("Think of hydration like oil inside a car engine. Drinking plain water without trace electrolytes can leave your cells thirsty, whereas adding a squeeze of fresh lemon and a tiny pinch of mineral salt helps water enter your cells smoothly all morning.", "Electrolytes help water hydrate your cells like engine oil.", "lemon water glass", "pouring clean water")
+        ("NUTRIENT ABSORPTION SECRET", "Here is a critical bonus tip to multiply your results. When you pair healthy fats like extra-virgin olive oil or avocado with colorful vegetables, your digestive tract absorbs fat-soluble vitamins up to four times faster than eating plain salads alone.", "olive oil salad", "fresh avocado vegetables"),
+        ("DEEP CELLULAR NIGHT REPAIR", "Another powerful habit happens during the last two hours before sleep. Swapping bright phone screens and late-night snacks for warm chamomile tea or magnesium-rich almonds lowers stress hormones and activates deep overnight cellular repair.", "chamomile tea cup", "almonds nuts healthy"),
+        ("ELECTROLYTE HYDRATION FORMULA", "Think of cellular hydration like oil inside a car engine. Drinking plain water without trace minerals can leave your cells thirsty, whereas adding fresh lemon juice and a tiny pinch of sea salt helps water energize your organs all morning.", "lemon water glass", "pouring clean water")
     ]
     b_i = 0
     while cur_t < MIN_LONG_SEC:
-        b_txt, b_sub, q1, q2 = bonus_list[b_i % len(bonus_list)]
+        b_head, b_txt, q1, q2 = bonus_list[b_i % len(bonus_list)]
         aw = f"temp/a_{idx}.wav"
         dur = gen_wav(b_txt, aw)
         v1 = dl_pexels(q1, f"{idx}_a")
         v2 = dl_pexels(q2, f"{idx}_b")
         vp = prep_two(v1, v2, dur, f"temp/prep_{idx}.mp4")
-        clips.append(CompositeVideoClip([VideoFileClip(vp).subclip(0, dur), make_overlay(6, "PRACTICAL DAILY EXAMPLE", b_sub, dur)]))
+        clips.append(build_synced_scene(VideoFileClip(vp).subclip(0, dur), "BONUS INSIGHT", b_head, b_txt, dur))
         wavs.append(aw)
         cur_t += dur
         idx += 1
         b_i += 1
 
     aw = f"temp/a_{idx}.wav"
-    dur = gen_wav(sc.get("outro", "Thank you for watching MedPulse Daily! Please like, subscribe, and comment below!"), aw)
+    o_txt = sc.get("outro", "Thank you for watching MedPulse Daily! Please like, subscribe, and comment below!")
+    o_head = sc.get("outro_headline", "SUBSCRIBE TO MEDPULSE DAILY")
+    dur = gen_wav(o_txt, aw)
     v1 = dl_pexels("happy healthy lifestyle", f"{idx}_a")
     v2 = dl_pexels("fresh fruits vegetables", f"{idx}_b")
     vp = prep_two(v1, v2, dur, f"temp/prep_{idx}.mp4")
-    clips.append(CompositeVideoClip([VideoFileClip(vp).subclip(0, dur), make_overlay(0, "SUBSCRIBE & SHARE YOUR THOUGHTS", sc.get("outro_sub", "Like, subscribe, and comment below!"), dur)]))
+    clips.append(build_synced_scene(VideoFileClip(vp).subclip(0, dur), "MEDPULSE DAILY", o_head, o_txt, dur))
     wavs.append(aw)
 
     fin = concatenate_videoclips(clips, method="compose")
