@@ -17,11 +17,12 @@ if GEMINI_KEY:
 W, H = 1280, 720
 SW, SH = 1080, 1920
 FPS = 24
+CHANNEL_NAME = "MEDPULSE DAILY"
 VOICE_NAME = "en-US-ChristopherNeural"
 VOICE_RATE = "-4%"
 VOICE_PITCH = "-2Hz"
 MIN_LONG_SEC = 560.0
-LOGO_PATH = "\u062a\u0646\u0632\u064a\u0644.jpeg"
+LOGO_CANDIDATES = ["logo.jpeg", "logo.jpg", "logo.png", "\u062a\u0646\u0632\u064a\u0644.jpeg"]
 USED_NEWS_FILE = "used_news.txt"
 USED_VIDEOS_FILE = "used_videos.txt"
 
@@ -34,6 +35,12 @@ BANNED = [
     r"\bdr\.?\s*mindy\b", r"\bdr\.?\s*oz\b", r"\bdr\.?\s*hyman\b", r"\bdr\.?\s*huberman\b",
     r"\bdoctor\s+[a-z]+\b", r"\bdr\.?\s+[a-z]+\b", r"\bprofessor\s+[a-z]+\b"
 ]
+
+def get_logo_path():
+    for p in LOGO_CANDIDATES:
+        if os.path.exists(p):
+            return p
+    return LOGO_CANDIDATES[0]
 
 def clean_txt(t):
     if not t:
@@ -176,7 +183,7 @@ def fetch_live_trend():
 
 def generate_script(tr):
     prompt = "\n".join([
-        "You are an elite medical educator and viral documentary scriptwriter.",
+        "You are an elite medical educator and viral documentary scriptwriter for MedPulse Daily.",
         "Today's Live Trending Health Topic: " + tr["title"],
         "Context: " + tr["summary"],
         "STRICT RULES:",
@@ -205,8 +212,8 @@ def generate_script(tr):
         "      ]",
         "    }",
         "  ],",
-        '  "outro": "45-word warm conclusion asking viewers to like, subscribe, and share their experience in the comments.",',
-        '  "outro_sub": "Like, subscribe, and comment below!",',
+        '  "outro": "45-word warm conclusion asking viewers to like, subscribe to MedPulse Daily, and share their experience in the comments.",',
+        '  "outro_sub": "Like, subscribe to MedPulse Daily, and comment below!",',
         '  "seo_description": "3-paragraph engaging summary (no links, no person names).",',
         '  "seo_tags": ["health", "wellness", "nutrition", "symptoms", "science"]',
         "}"
@@ -238,12 +245,12 @@ def generate_script(tr):
         "video_title": clean_txt(tr["title"]) + " - 6 Early Warning Signs & Natural Fixes",
         "short_title": "Never Ignore These Shocking Body Warning Signs!",
         "thumbnail_hook": "SILENT BODY ALARM",
-        "intro_hook": f"Stop and check how your body feels right now! Could your everyday fatigue, sudden cravings, or restless sleep actually be a silent alarm? Today we uncover the science behind {clean_txt(tr['title'])} with simple examples.",
+        "intro_hook": f"Stop and check how your body feels right now! Could your everyday fatigue, sudden cravings, or restless sleep actually be a silent alarm? Today on MedPulse Daily we uncover the science behind {clean_txt(tr['title'])} with simple examples.",
         "intro_sub": "Your daily fatigue or cravings could be a silent body alarm!",
         "intro_query": "human body scan medical",
         "points": pts,
-        "outro": "Thank you for watching! If these simple examples helped you understand your body better, please hit the like button, subscribe to our channel, and tell us in the comments which warning sign surprised you most!",
-        "outro_sub": "Hit like, subscribe, and share your thoughts in the comments!",
+        "outro": "Thank you for watching MedPulse Daily! If these simple examples helped you understand your body better, please hit the like button, subscribe to our channel, and tell us in the comments which warning sign surprised you most!",
+        "outro_sub": "Hit like, subscribe to MedPulse Daily, and comment below!",
         "seo_description": f"Discover the science and everyday examples behind {clean_txt(tr['title'])}. Learn the 6 warning signs and natural food habits to protect your health.",
         "seo_tags": ["health", "nutrition", "symptoms", "wellness", "medicalscience"]
     }
@@ -367,19 +374,31 @@ def export_final_mp4(clip_obj, wav_list, out_mp4):
     clip_obj.write_videofile(tmp_v, fps=FPS, codec="libx264", audio=False, preset="ultrafast", threads=4, logger=None)
     subprocess.run([FFMPEG_EXE, "-y", "-i", tmp_v, "-i", tmp_a, "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-shortest", out_mp4], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-def paste_logo(img, sz=76, pos=(W - 96, 20)):
-    if not os.path.exists(LOGO_PATH):
-        return
-    try:
-        lg = Image.open(LOGO_PATH).convert("RGBA").resize((sz, sz), Image.LANCZOS)
-        mask = Image.new("L", (sz, sz), 0)
-        ImageDraw.Draw(mask).ellipse((0, 0, sz, sz), fill=255)
-        ring = Image.new("RGBA", (sz + 6, sz + 6), (0, 0, 0, 0))
-        ImageDraw.Draw(ring).ellipse((0, 0, sz + 5, sz + 5), outline=(255, 205, 0, 235), width=3)
-        img.paste(ring, (pos[0] - 3, pos[1] - 3), ring)
-        img.paste(lg, pos, mask)
-    except Exception:
-        pass
+def paste_logo(img, sz=68, cx=W - 92, top_y=14, f_sz=13):
+    lp = get_logo_path()
+    lx = cx - (sz // 2)
+    if os.path.exists(lp):
+        try:
+            lg = Image.open(lp).convert("RGBA").resize((sz, sz), Image.LANCZOS)
+            mask = Image.new("L", (sz, sz), 0)
+            ImageDraw.Draw(mask).ellipse((0, 0, sz, sz), fill=255)
+            ring = Image.new("RGBA", (sz + 6, sz + 6), (0, 0, 0, 0))
+            ImageDraw.Draw(ring).ellipse((0, 0, sz + 5, sz + 5), outline=(255, 205, 0, 245), width=3)
+            img.paste(ring, (lx - 3, top_y - 3), ring)
+            img.paste(lg, (lx, top_y), mask)
+        except Exception:
+            pass
+    dr = ImageDraw.Draw(img)
+    fn = get_font(f_sz, True)
+    bb = dr.textbbox((0, 0), CHANNEL_NAME, font=fn)
+    tw, th = bb[2] - bb[0], bb[3] - bb[1]
+    pad_x, pad_y = 10, 4
+    bx1 = cx - (tw // 2) - pad_x
+    bx2 = cx + (tw // 2) + pad_x
+    by1 = top_y + sz + 5
+    by2 = by1 + th + (pad_y * 2) + 2
+    dr.rounded_rectangle([(bx1, by1), (bx2, by2)], radius=6, fill=(8, 16, 34, 240), outline=(255, 205, 0, 230), width=2)
+    dr.text((cx - (tw // 2), by1 + pad_y - 1), CHANNEL_NAME, font=fn, fill=(255, 215, 0, 255))
 
 def make_overlay(p_num, p_title, sub_txt, dur):
     img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
@@ -393,7 +412,7 @@ def make_overlay(p_num, p_title, sub_txt, dur):
     if p_title:
         dr.rounded_rectangle([(255, 24), (790, 64)], radius=8, fill=(15, 23, 42, 210))
         dr.text((270, 31), clean_txt(p_title).upper()[:38], font=f_t, fill=(255, 215, 0, 255))
-    paste_logo(img, sz=72, pos=(W - 94, 18))
+    paste_logo(img, sz=66, cx=W - 92, top_y=12, f_sz=13)
     y = H - 150
     for ln in wrap_lines(sub_txt, f_s, W - 110, dr)[:3]:
         bb = dr.textbbox((0, 0), ln, font=f_s)
@@ -417,7 +436,7 @@ def make_card(p_num, p_title, dur=2.8):
         b2 = dr.textbbox((0, 0), ln, font=f2)
         dr.text(((W - (b2[2] - b2[0])) // 2, y), ln, font=f2, fill=(255, 215, 0, 255))
         y += 68
-    paste_logo(img, sz=88, pos=(W - 115, 80))
+    paste_logo(img, sz=76, cx=W - 155, top_y=76, f_sz=14)
     return ImageClip(np.array(img)).set_duration(dur)
 
 def calc_excitement(rec):
@@ -446,7 +465,7 @@ def save_short_ov_png(badge_txt, sub_txt, out_png):
     f_b, f_s = get_font(30, True), get_font(44, True)
     dr.rounded_rectangle([(42, 58), (690, 128)], radius=14, fill=(215, 30, 30, 245))
     dr.text((66, 75), clean_txt(badge_txt).upper()[:28], font=f_b, fill=(255, 255, 255, 255))
-    paste_logo(img, sz=106, pos=(SW - 146, 42))
+    paste_logo(img, sz=94, cx=SW - 115, top_y=24, f_sz=18)
     y = SH - 500
     for ln in wrap_lines(sub_txt, f_s, SW - 110, dr)[:4]:
         bb = dr.textbbox((0, 0), ln, font=f_s)
@@ -471,11 +490,11 @@ def build_short_from_long(hook_rec, body_records):
             break
     chosen.sort(key=lambda x: calc_excitement(x))
     cta_wav = "temp/sh_cta.wav"
-    cta_dur = gen_wav("Don't miss the other warning signs and natural fixes! Watch the full video on our channel right now and subscribe!", cta_wav, rate="+2%")
+    cta_dur = gen_wav("Don't miss the other warning signs and natural fixes! Watch the full video on MedPulse Daily right now and subscribe!", cta_wav, rate="+2%")
     seq = [hook_rec]
     for c in chosen:
         seq.append({"badge": "SHOCKING REVEAL " + str(c["point_num"]), "sub": c["sub"], "vpath": c["vpath"], "apath": c["apath"], "dur": c["dur"]})
-    seq.append({"badge": "WATCH FULL VIDEO", "sub": "Watch the full video on our channel for all 6 steps!", "vpath": hook_rec["vpath"], "apath": cta_wav, "dur": cta_dur})
+    seq.append({"badge": "WATCH FULL VIDEO", "sub": "Watch the full video on MedPulse Daily for all 6 steps!", "vpath": hook_rec["vpath"], "apath": cta_wav, "dur": cta_dur})
     v_parts, w_parts = [], []
     vf = f"[0:v]scale=-2:{SH}:flags=lanczos,crop={SW}:{SH}:(iw-{SW})/2:0,setsar=1:1,fps={FPS}[bg];[bg][1:v]overlay=0:0,setsar=1:1,setdar=9/16[v]"
     for i, it in enumerate(seq):
@@ -515,7 +534,7 @@ def write_details(tr, sc):
         "==========================================",
         "3. YOUTUBE DESCRIPTION (WITH TODAY'S SOURCES):",
         "==========================================",
-        clean_txt(sc.get("seo_description", "")), "",
+        "Welcome to MedPulse Daily! " + clean_txt(sc.get("seo_description", "")), "",
         "SCIENTIFIC & MEDICAL SOURCES FOR THIS VIDEO:",
         "\n".join(src_lines), "",
         "MEDICAL DISCLAIMER:",
@@ -528,7 +547,7 @@ def write_details(tr, sc):
         "==========================================",
         "5. THUMBNAIL IMAGE PROMPT (LANDSCAPE 16:9):",
         "==========================================",
-        f"Ultra-detailed cinematic 3D medical illustration representing {v_title}, glowing anatomical highlight, dramatic studio lighting, high contrast, 8k resolution, bold text overlay '{thumb_hook}', no people names, aspect ratio 16:9."
+        f"Ultra-detailed cinematic 3D medical illustration representing {v_title}, glowing anatomical highlight, deep dark navy and golden accents, dramatic studio lighting, high contrast, 8k resolution, bold text overlay '{thumb_hook}', no people names, aspect ratio 16:9."
     ])
     with open("output/youtube_details.txt", "w", encoding="utf-8") as f:
         f.write(body)
@@ -593,7 +612,7 @@ def main():
         b_i += 1
 
     aw = f"temp/a_{idx}.wav"
-    dur = gen_wav(sc.get("outro", "Thank you for watching! Please like, subscribe, and comment below!"), aw)
+    dur = gen_wav(sc.get("outro", "Thank you for watching MedPulse Daily! Please like, subscribe, and comment below!"), aw)
     v1 = dl_pexels("happy healthy lifestyle", f"{idx}_a")
     v2 = dl_pexels("fresh fruits vegetables", f"{idx}_b")
     vp = prep_two(v1, v2, dur, f"temp/prep_{idx}.mp4")
