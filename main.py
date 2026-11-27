@@ -215,24 +215,29 @@ def make_chime(p, dur=2.8):
     with wave.open(p, "wb") as wf: wf.setnchannels(2); wf.setsampwidth(2); wf.setframerate(sr); wf.writeframes(pcm.tobytes())
     return dur
 def build_master_wav(paths, out_wav):
-    chunks, sr = [], 44100
-    for p in paths:
-        if not os.path.exists(p): continue
-        try:
-            with wave.open(p, "rb") as wf: chunks.append(np.frombuffer(wf.readframes(wf.getnframes()), dtype=np.int16))
-        except Exception: pass
-    arr = np.concatenate(chunks) if chunks else np.zeros(sr * 2, dtype=np.int16)
-    n = len(arr) // 2
-    t = np.linspace(0, n / float(sr), n, endpoint=False)
-    amb = (0.012 * np.sin(2 * np.pi * 110.0 * t) + 0.008 * np.sin(2 * np.pi * 165.0 * t)) * 32767.0
-    amb_s = np.column_stack([amb, amb]).flatten()[:len(arr)]
-    mix = np.clip(arr.astype(np.float32) + amb_s, -32768, 32767).astype(np.int16)
-    with wave.open(out_wav, "wb") as wf: wf.setnchannels(2); wf.setsampwidth(2); wf.setframerate(sr); wf.writeframes(mix.tobytes())
+    sr, idx_pos = 44100, 0
+    with wave.open(out_wav, "wb") as out_wf:
+        out_wf.setnchannels(2); out_wf.setsampwidth(2); out_wf.setframerate(sr)
+        for p in paths:
+            if not os.path.exists(p): continue
+            try:
+                with wave.open(p, "rb") as wf: raw = wf.readframes(wf.getnframes())
+                arr = np.frombuffer(raw, dtype=np.int16)
+                n = len(arr) // 2
+                if gt(n, 0):
+                    t = (np.arange(n, dtype=np.float32) + idx_pos) / float(sr)
+                    amb = (0.012 * np.sin(2 * np.pi * 110.0 * t) + 0.008 * np.sin(2 * np.pi * 165.0 * t)) * 32767.0
+                    amb_s = np.column_stack([amb, amb]).flatten()[:len(arr)]
+                    mix = np.clip(arr.astype(np.float32) + amb_s, -32768, 32767).astype(np.int16)
+                    out_wf.writeframes(mix.tobytes())
+                    idx_pos += n
+            except Exception: pass
+        if le(idx_pos, 0): out_wf.writeframes(np.zeros(sr * 8, dtype=np.int16).tobytes())
 def valid_vid(p):
-    if not p or not os.path.exists(p) or lt(os.path.getsize(p), 30000): return False
+    if not p or not os.path.exists(p) or lt(os.path.getsize(p), 15000): return False
     try:
         c = VideoFileClip(p); d = c.duration or 0; _ = c.get_frame(min(0.2, max(0.0, d * 0.1))); c.close()
-        return gt(d, 1.0)
+        return gt(d, 0.8)
     except Exception: return False
 def fetch_two_vids(q, used_ids, tag):
     out = []
@@ -257,18 +262,20 @@ def fetch_two_vids(q, used_ids, tag):
             except Exception: pass
     while lt(len(out), 2):
         p = f"temp/fb_{tag}_{len(out)}\x2emp4"
-        subprocess.run(["ffmpeg", "-y", "-f", "lavfi", "-i", "color=c=0x0b1528:s=1280x720:d=6:r=24", "-c:v", "libx264", "-pix_fmt", "yuv420p", p], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run(["ffmpeg", "-y", "-f", "lavfi", "-i", "color=c=0x0b1528:s=1280x720:d=8:r=24", "-c:v", "libx264", "-pix_fmt", "yuv420p", p], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         out.append(p)
     return out
 def prep_two(v1, v2, dur, out_p):
-    h1, h2 = max(1.8, dur * 0.52), max(1.8, dur * 0.52)
+    h = max(2.5, dur * 0.62)
     p1, p2, lst = out_p + "_a\x2emp4", out_p + "_b\x2emp4", out_p + "_l\x2etxt"
     vf = f"scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},fps={FPS},format=yuv420p"
-    subprocess.run(["ffmpeg", "-y", "-stream_loop", "-1", "-i", v1, "-t", f"{h1:.2f}", "-vf", vf, "-an", "-c:v", "libx264", "-preset", "ultrafast", p1], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    subprocess.run(["ffmpeg", "-y", "-stream_loop", "-1", "-i", v2, "-t", f"{h2:.2f}", "-vf", vf, "-an", "-c:v", "libx264", "-preset", "ultrafast", p2], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(["ffmpeg", "-y", "-stream_loop", "-1", "-i", v1, "-t", f"{h:.2f}", "-vf", vf, "-an", "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", p1], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(["ffmpeg", "-y", "-stream_loop", "-1", "-i", v2, "-t", f"{h:.2f}", "-vf", vf, "-an", "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", p2], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     open(lst, "w", encoding="utf-8").write(f"file '{os.path.abspath(p1)}'\nfile '{os.path.abspath(p2)}'\n")
-    subprocess.run(["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", lst, "-t", f"{dur + 0.6:.2f}", "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", out_p], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    return out_p if valid_vid(out_p) else p1
+    subprocess.run(["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", lst, "-t", f"{dur + 1.0:.2f}", "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", out_p], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    if not valid_vid(out_p):
+        subprocess.run(["ffmpeg", "-y", "-stream_loop", "-1", "-i", p1 if valid_vid(p1) else v1, "-t", f"{dur + 1.0:.2f}", "-vf", vf, "-an", "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", out_p], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    return out_p
 def prep_short_bg(src_p, dur, out_p):
     vf = f"scale={SW}:{SH}:force_original_aspect_ratio=increase,crop={SW}:{SH},fps={FPS},format=yuv420p"
     subprocess.run(["ffmpeg", "-y", "-stream_loop", "-1", "-i", src_p, "-t", f"{dur + 1.0:.2f}", "-vf", vf, "-an", "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", out_p], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -294,7 +301,7 @@ def paste_logo(img, is_sh=False):
     drw = ImageDraw.Draw(img)
     if lp:
         try:
-            lg = Image.open(lp).convert("RGBA").resize((sz, sz), Image.LANCZOS)
+            lg = Image.open(lp).convert("RGBA").resize((sz, sz))
             msk = Image.new("L", (sz, sz), 0)
             ImageDraw.Draw(msk).ellipse((0, 0, sz, sz), fill=255)
             drw.ellipse((x0 - 3, y0 - 3, x0 + sz + 3, y0 + sz + 3), fill=(245, 190, 50, 240))
@@ -358,49 +365,63 @@ def split_timed_subs(txt, dur):
         out.append((c, t, max(0.25, d))); t += d
     return out
 def render_scene_file(bg_p, txt, dur, r_lbl, pt_title, out_p, is_tr=False, is_sh=False):
+    cw, ch = (SW, SH) if is_sh else (W, H)
+    raw_p = out_p + "_r\x2emp4"
     base, comp = None, None
     try:
-        base = VideoFileClip(bg_p).without_audio().subclip(0, dur)
+        base = VideoFileClip(bg_p).without_audio()
+        if lt(base.duration, dur): base = base.loop(duration=dur + 0.5)
+        base = base.subclip(0, dur)
         lays = [base]
         for c_txt, st, d in split_timed_subs(txt, dur):
             arr = make_frame_img(c_txt, r_lbl, pt_title, show_b=bool(is_tr and lt(st, 4.2)), is_sh=is_sh)
             lays.append(ImageClip(arr).set_start(st).set_duration(d))
-        comp = CompositeVideoClip(lays, size=(SW, SH) if is_sh else (W, H)).set_duration(dur)
-        comp.write_videofile(out_p, fps=FPS, codec="libx264", audio=False, preset="ultrafast", threads=2, logger=None)
-    except Exception:
-        if os.path.exists(bg_p): shutil.copyfile(bg_p, out_p)
+        comp = CompositeVideoClip(lays, size=(cw, ch)).set_duration(dur)
+        comp.write_videofile(raw_p, fps=FPS, codec="libx264", audio=False, preset="ultrafast", threads=2, ffmpeg_params=["-pix_fmt", "yuv420p"], logger=None)
+    except Exception: pass
     finally:
         for obj in (comp, base):
             try:
                 if obj: obj.close()
             except Exception: pass
-    if not valid_vid(out_p):
-        subprocess.run(["ffmpeg", "-y", "-i", bg_p, "-t", f"{dur:.2f}", "-an", "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", out_p], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    src_f = raw_p if valid_vid(raw_p) else bg_p
+    vf = f"scale={cw}:{ch},fps={FPS},format=yuv420p"
+    subprocess.run(["ffmpeg", "-y", "-stream_loop", "-1", "-i", src_f, "-t", f"{dur:.2f}", "-vf", vf, "-an", "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", out_p], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    if os.path.exists(raw_p):
+        try: os.remove(raw_p)
+        except Exception: pass
     return out_p
 def make_card_file(rnum, title, out_p, dur=2.8):
-    img = Image.new("RGBA", (W, H), (8, 18, 36, 255))
+    img = Image.new("RGB", (W, H), (8, 18, 36))
     drw = ImageDraw.Draw(img)
-    drw.rounded_rectangle((110, 140, W - 110, H - 140), radius=28, fill=(14, 30, 58, 255), outline=(245, 190, 50, 255), width=4)
+    drw.rounded_rectangle((110, 140, W - 110, H - 140), radius=28, fill=(14, 30, 58), outline=(245, 190, 50), width=4)
     f1, f2 = get_font(62), get_font(36)
     t1, t2 = f"COUNTDOWN {H35}{rnum}", clean_txt(title)[:46]
     b1, b2 = drw.textbbox((0, 0), t1, font=f1), drw.textbbox((0, 0), t2, font=f2)
-    draw_stroked(drw, ((W - (b1[2] - b1[0])) // 2, 245), t1, f1, (255, 210, 65, 255), sw=4)
-    draw_stroked(drw, ((W - (b2[2] - b2[0])) // 2, 365), t2, f2, (255, 255, 255, 255), sw=3)
+    draw_stroked(drw, ((W - (b1[2] - b1[0])) // 2, 245), t1, f1, (255, 210, 65), sw=4)
+    draw_stroked(drw, ((W - (b2[2] - b2[0])) // 2, 365), t2, f2, (255, 255, 255), sw=3)
     paste_logo(img, is_sh=False)
-    cl = ImageClip(np.array(img)).set_duration(dur)
-    cl.write_videofile(out_p, fps=FPS, codec="libx264", audio=False, preset="ultrafast", logger=None)
-    cl.close()
+    png_p = out_p + "\x2epng"
+    img.save(png_p, "PNG")
+    vf = f"scale={W}:{H},fps={FPS},format=yuv420p"
+    subprocess.run(["ffmpeg", "-y", "-loop", "1", "-i", png_p, "-t", f"{dur:.2f}", "-vf", vf, "-an", "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", out_p], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     return out_p
 def export_final_mp4(part_files, wavs, out_mp4, aspect="16:9"):
-    sil_v, m_wav, lst = out_mp4 + "_s\x2emp4", out_mp4 + "_m\x2ewav", out_mp4 + "_l\x2etxt"
+    tag = os.path.basename(out_mp4).replace(".", "_")
+    sil_v, m_wav, lst = f"temp/{tag}_s\x2emp4", f"temp/{tag}_m\x2ewav", f"temp/{tag}_l\x2etxt"
     build_master_wav(wavs, m_wav)
+    valid_parts = [pf for pf in part_files if valid_vid(pf)]
+    if not valid_parts:
+        fb_p = f"temp/{tag}_fb\x2emp4"
+        sz_s = "1080x1920" if aspect == "9:16" else "1280x720"
+        subprocess.run(["ffmpeg", "-y", "-f", "lavfi", "-i", f"color=c=0x0b1528:s={sz_s}:d=10:r=24", "-c:v", "libx264", "-pix_fmt", "yuv420p", fb_p], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        valid_parts = [fb_p]
     with open(lst, "w", encoding="utf-8") as f:
-        for pf in part_files:
-            if os.path.exists(pf): f.write(f"file '{os.path.abspath(pf)}'\n")
+        for pf in valid_parts: f.write(f"file '{os.path.abspath(pf)}'\n")
     subprocess.run(["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", lst, "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", sil_v], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    subprocess.run(["ffmpeg", "-y", "-i", sil_v, "-i", m_wav, "-map", "0:v:0", "-map", "1:a:0", "-c:v", "libx264", "-preset", "fast", "-pix_fmt", "yuv420p", "-aspect", aspect, "-c:a", "aac", "-b:a", "192k", "-shortest", out_mp4], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    if not os.path.exists(out_mp4) or lt(os.path.getsize(out_mp4), 50000):
-        subprocess.run(["ffmpeg", "-y", "-i", sil_v, "-i", m_wav, "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", out_mp4], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(["ffmpeg", "-y", "-i", sil_v, "-i", m_wav, "-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy", "-aspect", aspect, "-c:a", "aac", "-b:a", "192k", "-shortest", out_mp4], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    if not valid_vid(out_mp4):
+        subprocess.run(["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", lst, "-i", m_wav, "-map", "0:v:0", "-map", "1:a:0", "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-aspect", aspect, "-c:a", "aac", "-b:a", "192k", "-shortest", out_mp4], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 def calc_excitement(sc):
     t = sc["text"].lower()
     b = sum(6 for w in ["sleep", "night", "heart", "brain", "nerve", "liver", "blood", "sudden", "critical", "number 1", "24 hours"] if w in t)
@@ -445,51 +466,38 @@ def write_details(trend, data, r_titles):
     tags = [clean_txt(x) for x in data.get("seo_tags", []) if clean_txt(x)][:28]
     tags_s = ", ".join(tags)
     src_lines = [f"{i + 1}. {s['name']} - {s['title']}\n   {s['url']}" for i, s in enumerate(trend.get("sources", []))]
-    r_lines = [f"* {r}" for r in r_titles]
+    r_lines = [f"- {r}" for r in r_titles]
     lines = [
         f"Topic: {trend['title']}",
         f"Generated: {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}",
-        "",
-        "[SECTION 1: LONG VIDEO SPECIFICATIONS AND METADATA]",
-        "Format: 1280x720 HD (16:9 Landscape) | Duration: 9+ Minutes",
+        "[SECTION 1 - LONG VIDEO SPECIFICATIONS AND METADATA]",
+        "File: output/long_video\x2emp4 | Resolution: 1280x720 HD (16:9) | Duration: 9+ Minutes",
         f"LONG VIDEO TITLE:\n{lt_t}",
-        "",
         "LONG VIDEO DESCRIPTION:",
         f"{desc}",
-        "",
         f"In today's evidence-based medical countdown on MedPulse Daily, we examine {trend['title']} from Countdown {H35}6 down to the critical {H35}1 warning sign, including internal organ mechanisms and 24-hour nutritional fixes:",
         *r_lines,
-        "",
         "Verified Medical And Scientific Sources:",
         *src_lines,
-        "",
         "Disclaimer: This video is for educational purposes only and is not a substitute for professional medical advice.",
-        "",
         f"{H35}MedPulseDaily {H35}HealthWarningSigns {H35}Symptoms {H35}Nutrition {H35}PreventiveHealth",
-        "",
         f"LONG VIDEO KEYWORDS AND TAGS (COPY AND PASTE):\n{tags_s}",
-        "",
-        "[SECTION 2: SHORT VIDEO SPECIFICATIONS AND METADATA]",
-        "Format: 1080x1920 Vertical HD (9:16 YouTube Shorts)",
+        "[SECTION 2 - SHORT VIDEO SPECIFICATIONS AND METADATA]",
+        "File: output/short_video\x2emp4 | Resolution: 1080x1920 Vertical HD (9:16)",
         f"SHORT VIDEO TITLE:\n{sh_t} {H35}Shorts",
-        "",
         "SHORT VIDEO DESCRIPTION:",
         f"Watch the most urgent warning signs of {trend['title']} and see the full {H35}6 to {H35}1 countdown on the MedPulse Daily channel.",
-        "",
         "Verified Sources:",
         *src_lines[:3],
-        "",
         f"{H35}Shorts {H35}MedPulseDaily {H35}HealthTips {H35}BodySignals {H35}Wellness",
-        "",
         f"SHORT VIDEO KEYWORDS AND TAGS (COPY AND PASTE):\n{tags_s}",
-        "",
-        "[SECTION 3: THUMBNAIL SPECIFICATIONS AND DESCRIPTION]",
-        "Included Ready File: output/thumbnail.jpg (1280x720 HD)",
+        "[SECTION 3 - THUMBNAIL SPECIFICATIONS AND DESCRIPTION]",
+        "File: output/thumbnail\x2ejpg | Resolution: 1280x720 HD",
         f"Thumbnail Headline Text: 6 WARNING SIGNS ({H35}6 TO {H35}1) - NUMBER 1 HAPPENS IN YOUR SLEEP",
         "Visual Design And AI Generator Prompt:",
         f"{th_p}"
     ]
-    open("output/youtube_details\x2etxt", "w", encoding="utf-8").write("\n".join(lines))
+    open("output/youtube_details\x2etxt", "w", encoding="utf-8").write("\n\n".join(lines))
 def save_used(title):
     arr, uf = [], "used_topics\x2ejson"
     if os.path.exists(uf):
